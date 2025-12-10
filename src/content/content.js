@@ -1,6 +1,5 @@
 /**
- * Content Script - Version corrigée sans CDN externe
- * Utilise chrome.tabs.captureVisibleTab au lieu de html2canvas
+ * Content Script - Version debug pour traquer l'erreur
  */
 
 let isSelectionMode = false;
@@ -137,14 +136,12 @@ function handleMouseMove(e) {
 function updateElementInfo(element) {
   const tag = element.tagName.toLowerCase();
   
-  // Fix: Vérifier que className existe et est une string
   let classes = 'Aucune';
   if (element.className) {
     if (typeof element.className === 'string') {
       const classList = element.className.split(' ').filter(c => c.trim().length > 0);
       classes = classList.length > 0 ? classList.slice(0, 3).join(', ') : 'Aucune';
     } else if (element.className.baseVal !== undefined) {
-      // SVG elements
       classes = element.className.baseVal || 'Aucune';
     }
   }
@@ -178,19 +175,23 @@ function handleKeyDown(e) {
 
 async function captureElement(element) {
   try {
-    console.log('[Shopify Converter] Démarrage de la capture...');
+    console.log('[DEBUG] 1. Démarrage capture');
+    console.log('[DEBUG] 1.1. Element:', element);
+    console.log('[DEBUG] 1.2. Element.tagName:', element.tagName);
+    console.log('[DEBUG] 1.3. Element.className:', element.className);
     
     stopSelectionMode();
     showLoader('Capture en cours...');
     
     updateLoader('📸 Capture du screenshot...');
+    console.log('[DEBUG] 2. Avant captureScreenshot');
     
-    // Capturer le screenshot via le background (chrome.tabs.captureVisibleTab)
     const screenshot = await captureScreenshotViaBackground(element);
+    console.log('[DEBUG] 3. Après captureScreenshot:', screenshot ? 'OK' : 'NULL');
     
     updateLoader('📝 Extraction des données...');
+    console.log('[DEBUG] 4. Extraction className');
     
-    // Fix: Gérer className correctement
     let className = '';
     if (element.className) {
       if (typeof element.className === 'string') {
@@ -199,10 +200,12 @@ async function captureElement(element) {
         className = element.className.baseVal;
       }
     }
+    console.log('[DEBUG] 4.1. className extrait:', className);
     
+    console.log('[DEBUG] 5. Création captureData');
     const captureData = {
       html: element.outerHTML,
-      computedStyles: getComputedStylesRecursive(element),
+      computedStyles: {}, // TEMPORAIREMENT VIDE pour debug
       boundingBox: element.getBoundingClientRect().toJSON(),
       tagName: element.tagName,
       className: className,
@@ -211,16 +214,18 @@ async function captureElement(element) {
       timestamp: Date.now()
     };
     
+    console.log('[DEBUG] 6. CaptureData créé:', captureData);
     console.log('[Shopify Converter] Screenshot capturé:', screenshot?.size || 'N/A');
-    console.log('[Shopify Converter] Données capturées, mode:', conversionMode);
     
     updateLoader('🚀 Envoi au background...');
+    console.log('[DEBUG] 7. Avant sendMessage');
     
     chrome.runtime.sendMessage({
       action: 'elementCaptured',
       data: captureData,
       mode: conversionMode
     }, (response) => {
+      console.log('[DEBUG] 8. Réponse reçue:', response);
       hideLoader();
       if (response && response.success) {
         showSuccessMessage(
@@ -234,21 +239,17 @@ async function captureElement(element) {
     });
     
   } catch (error) {
-    console.error('[Shopify Converter] Erreur lors de la capture:', error);
+    console.error('[DEBUG] ERREUR CAPTURÉE:', error);
+    console.error('[DEBUG] Stack:', error.stack);
     hideLoader();
     showErrorMessage(error.message);
   }
 }
 
-/**
- * Capturer un screenshot via le background script
- * Utilise chrome.tabs.captureVisibleTab au lieu de html2canvas
- */
 async function captureScreenshotViaBackground(element) {
   try {
     const rect = element.getBoundingClientRect();
     
-    // Demander au background de capturer l'onglet
     const response = await new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({ action: 'captureTabScreenshot' }, (response) => {
         if (response && response.dataUrl) {
@@ -259,7 +260,6 @@ async function captureScreenshotViaBackground(element) {
       });
     });
     
-    // Cropper l'image sur l'élément
     const croppedDataUrl = await cropImage(response.dataUrl, rect);
     
     return {
@@ -273,14 +273,10 @@ async function captureScreenshotViaBackground(element) {
     
   } catch (error) {
     console.error('[Screenshot] Erreur capture:', error);
-    // Retourner null si échec - le prompt fonctionnera quand même sans screenshot
     return null;
   }
 }
 
-/**
- * Cropper une image sur une zone spécifique
- */
 async function cropImage(dataUrl, rect) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -288,12 +284,11 @@ async function cropImage(dataUrl, rect) {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       
-      const scale = 2; // Retina
+      const scale = 2;
       canvas.width = rect.width * scale;
       canvas.height = rect.height * scale;
       ctx.scale(scale, scale);
       
-      // Crop
       ctx.drawImage(
         img,
         rect.left, rect.top, rect.width, rect.height,
@@ -313,28 +308,6 @@ function estimateBase64Size(base64) {
   if (bytes < 1024) return bytes.toFixed(0) + ' B';
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-}
-
-function getComputedStylesRecursive(element, depth = 0, maxDepth = 3) {
-  if (depth > maxDepth) return {};
-  
-  const styles = {};
-  const computed = window.getComputedStyle(element);
-  
-  const importantProps = [
-    'display', 'position', 'width', 'height', 'margin', 'padding',
-    'background', 'backgroundColor', 'backgroundImage', 'backgroundSize',
-    'color', 'fontSize', 'fontFamily', 'fontWeight', 'lineHeight',
-    'border', 'borderRadius', 'boxShadow', 'textAlign',
-    'flex', 'flexDirection', 'justifyContent', 'alignItems',
-    'grid', 'gridTemplateColumns', 'gridGap'
-  ];
-  
-  importantProps.forEach(prop => {
-    styles[prop] = computed.getPropertyValue(prop);
-  });
-  
-  return styles;
 }
 
 function showLoader(message = 'Capture en cours...') {
@@ -379,4 +352,4 @@ function showErrorMessage(error) {
   setTimeout(() => message.remove(), 5000);
 }
 
-console.log('[Shopify Converter] Content script chargé v1.1.1');
+console.log('[Shopify Converter] Content script chargé v1.1.4-DEBUG');
