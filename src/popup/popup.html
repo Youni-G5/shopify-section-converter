@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Shopify Section Converter</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      width: 320px;
+      padding: 16px;
+      background: #f5f5f5;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 18px;
+    }
+    h1 {
+      font-size: 15px;
+      color: #111827;
+    }
+    p {
+      font-size: 13px;
+      color: #4b5563;
+      margin-bottom: 12px;
+    }
+    button {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: none;
+      background: #4CAF50;
+      color: white;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: background 0.2s, transform 0.1s, box-shadow 0.1s;
+      margin-bottom: 8px;
+    }
+    button:hover {
+      background: #45a049;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(76, 175, 80, 0.3);
+    }
+    .hint {
+      font-size: 11px;
+      color: #6b7280;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="icon">🧩</div>
+      <div>
+        <h1>Shopify Section Converter</h1>
+        <p>Capture une section et prépare-la pour Perplexity.</p>
+      </div>
+    </div>
+    <button id="startSelection">
+      🎯 Activer la sélection
+    </button>
+    <p class="hint">Survole puis clique sur la section à convertir.</p>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
