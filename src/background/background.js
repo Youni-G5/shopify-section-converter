@@ -1,19 +1,25 @@
 /**
- * Background Service Worker - Phase 2
- * - Mode automatique Perplexity
- * - Injection et observation
+ * Background Service Worker - Phase 3+ avec screenshots
+ * Support des 3 modes + gestion screenshots
  */
 
+import { PerplexityAPI, getAPIKey } from '../lib/perplexity-api.js';
+import { saveSection } from '../lib/library.js';
+import { detectBlockType, analyzeComplexity } from '../lib/analyzer.js';
+
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('[Shopify Converter] Extension installée - Phase 2');
+  console.log('[Shopify Converter] Extension installée - Version 1.1.0 (Screenshots)');
 });
 
-// Messages provenant du popup ou du content script
+// Messages
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'startSelectionFromPopup') {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (!tabs[0]) return;
-      chrome.tabs.sendMessage(tabs[0].id, { action: 'startSelection' }, (res) => {
+      chrome.tabs.sendMessage(tabs[0].id, { 
+        action: 'startSelection',
+        mode: message.mode 
+      }, (res) => {
         sendResponse(res || { success: true });
       });
     });
@@ -27,8 +33,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === 'captureTabScreenshot') {
+    // Capturer l'onglet actif
+    chrome.tabs.captureVisibleTab(null, { format: 'png' }, (dataUrl) => {
+      sendResponse({ dataUrl: dataUrl });
+    });
+    return true;
+  }
+
   if (message.action === 'perplexity_response') {
-    // Réponse du script d'observation Perplexity
     handlePerplexityResponse(message.data)
       .then(() => sendResponse({ success: true }))
       .catch((error) => sendResponse({ success: false, error: error.message }));
@@ -36,22 +49,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'perplexity_error') {
-    console.error('[Perplexity Auto] Erreur:', message.error);
+    console.error('[Perplexity] Erreur:', message.error);
     sendResponse({ success: false, error: message.error });
     return true;
   }
 });
 
 async function handleElementCaptured(captureData, mode) {
-  console.log('[Shopify Converter] elementCaptured - mode:', mode);
+  console.log('[Shopify Converter] elementCaptured - mode:', mode, 'screenshot:', captureData.screenshot ? 'OUI' : 'NON');
 
+  // Analyser la section
+  const blockType = detectBlockType({ 
+    tagName: captureData.tagName,
+    className: captureData.className,
+    outerHTML: captureData.html 
+  });
+  
+  const complexity = analyzeComplexity({
+    outerHTML: captureData.html,
+    querySelectorAll: () => [] // Simplifié pour background
+  });
+
+  // Enrichir les données
+  captureData.blockType = blockType;
+  captureData.complexity = complexity;
+
+  // Stocker
   await chrome.storage.local.set({ lastCapture: captureData });
 
-  if (mode === 'auto') {
-    // Mode automatique: injection dans Perplexity
+  // Router selon le mode
+  if (mode === 'api') {
+    await convertWithPerplexityAPI(captureData);
+  } else if (mode === 'auto') {
     await convertWithPerplexityAuto(captureData);
   } else {
-    // Mode manuel: ouvrir le bridge
+    // Mode manuel
     await chrome.windows.create({
       url: chrome.runtime.getURL('src/popup/perplexity-bridge.html'),
       type: 'popup',
@@ -62,36 +94,88 @@ async function handleElementCaptured(captureData, mode) {
   }
 }
 
+/**
+ * Mode API - Appels directs
+ */
+async function convertWithPerplexityAPI(captureData) {
+  try {
+    console.log('[Perplexity API] Démarrage conversion...');
+
+    const apiKey = await getAPIKey();
+    if (!apiKey) {
+      throw new Error('API key non configurée');
+    }
+
+    const api = new PerplexityAPI(apiKey);
+    const result = await api.convert(captureData);
+
+    // Stocker la conversion
+    await chrome.storage.local.set({ lastConversion: result });
+
+    // Sauvegarder dans la bibliothèque
+    await saveSection({
+      name: `Section ${captureData.blockType?.type || 'generic'}`,
+      url: captureData.url,
+      blockType: captureData.blockType,
+      complexity: captureData.complexity,
+      liquid: result.liquid,
+      schema: result.schema,
+      css: result.css,
+      js: result.js,
+      thumbnail: captureData.screenshot?.dataUrl,
+      conversionMethod: 'api'
+    });
+
+    // Ouvrir le panel de review
+    await chrome.windows.create({
+      url: chrome.runtime.getURL('src/popup/review.html'),
+      type: 'popup',
+      width: 1000,
+      height: 700,
+      focused: true
+    });
+
+  } catch (error) {
+    console.error('[Perplexity API] Erreur:', error);
+    // Fallback vers mode manuel
+    await chrome.windows.create({
+      url: chrome.runtime.getURL('src/popup/perplexity-bridge.html'),
+      type: 'popup',
+      width: 900,
+      height: 700,
+      focused: true
+    });
+  }
+}
+
+/**
+ * Mode Auto - Injection Perplexity
+ */
 async function convertWithPerplexityAuto(captureData) {
   try {
     console.log('[Perplexity Auto] Démarrage conversion automatique...');
 
-    // 1. Trouver ou créer un onglet Perplexity
     const perplexityTab = await findOrCreatePerplexityTab();
+    const prompt = buildPromptWithScreenshot(captureData);
 
-    // 2. Construire le prompt
-    const prompt = buildPromptFromCapture(captureData);
-
-    // 3. Stocker pour l'injection
     await chrome.storage.local.set({
       pendingConversion: {
         prompt: prompt,
+        screenshot: captureData.screenshot,
         timestamp: Date.now()
       }
     });
 
-    // 4. Injecter le script d'automatisation
     await chrome.scripting.executeScript({
       target: { tabId: perplexityTab.id },
       func: submitToPerplexity,
-      args: [prompt]
+      args: [prompt, captureData.screenshot?.dataUrl]
     });
 
-    console.log('[Perplexity Auto] Script injecté, en attente de la réponse...');
+    console.log('[Perplexity Auto] Script injecté avec screenshot');
 
   } catch (error) {
     console.error('[Perplexity Auto] Erreur:', error);
-    // Fallback vers mode manuel
     await chrome.windows.create({
       url: chrome.runtime.getURL('src/popup/perplexity-bridge.html'),
       type: 'popup',
@@ -106,68 +190,87 @@ async function findOrCreatePerplexityTab() {
   const tabs = await chrome.tabs.query({ url: 'https://www.perplexity.ai/*' });
 
   if (tabs.length > 0) {
-    // Utiliser l'onglet existant
     await chrome.tabs.update(tabs[0].id, { active: true });
     await new Promise(resolve => setTimeout(resolve, 1000));
     return tabs[0];
   } else {
-    // Créer un nouvel onglet
     const tab = await chrome.tabs.create({
       url: 'https://www.perplexity.ai',
       active: true
     });
-    await new Promise(resolve => setTimeout(resolve, 3000)); // Attendre chargement
+    await new Promise(resolve => setTimeout(resolve, 3000));
     return tab;
   }
 }
 
-function buildPromptFromCapture(capture) {
-  const html = capture.html || '';
-  const url = capture.url || '';
-  const tag = capture.tagName || '';
-  const classes = capture.className || '';
+function buildPromptWithScreenshot(capture) {
+  const { html, url, tagName, className, blockType, complexity, screenshot } = capture;
 
-  return [
-    'Tu es un expert développeur Shopify. Convertis cette section HTML en section Shopify Liquid complète.',
-    '',
-    `Page source: ${url}`,
-    `Élément: <${tag} class="${classes}">`,
-    '',
-    'Objectifs:',
-    '1. Fichier .liquid avec syntaxe Shopify ({{ section.settings.* }}, {% for block in section.blocks %})',
-    '2. Schema.json complet avec settings, blocks, presets',
-    '3. CSS responsif optimisé (breakpoints 750px, 990px)',
-    '4. JavaScript moderne si nécessaire',
-    '',
-    'FORMAT OBLIGATOIRE:',
-    '```liquid',
-    '[code]',
-    '```',
-    '```json',
-    '[schema]',
-    '```',
-    '```css',
-    '[styles]',
-    '```',
-    '```javascript',
-    '[script]',
-    '```',
-    '',
-    'HTML capturé:',
-    '```html',
-    html.substring(0, 5000), // Limiter pour éviter dépassement
-    '```'
-  ].join('\n');
+  return `
+CONVERSION SHOPIFY SECTION AVEC SCREENSHOT
+
+${screenshot ? '📸 UN SCREENSHOT DE LA SECTION EST ATTACHÉ. Utilise-le pour reproduire le design à l\'identique.' : ''}
+
+CONTEXTE:
+- Page source: ${url}
+- Élément: <${tagName} class="${className}">
+- Type détecté: ${blockType?.type || 'generic'} (confiance: ${Math.round((blockType?.confidence || 0) * 100)}%)
+- Complexité: ${complexity?.score || 5}/10
+- Dimensions: ${screenshot ? `${screenshot.naturalWidth}x${screenshot.naturalHeight}px` : 'N/A'}
+
+OBJECTIFS:
+1. REPRODUIRE VISUELLEMENT la section à l'identique en te basant sur le screenshot
+2. Générer un fichier .liquid Shopify production-ready
+3. Créer un schema.json complet avec settings et blocks
+4. CSS responsif (breakpoints Shopify: 750px, 990px)
+5. JavaScript moderne si nécessaire
+
+EXIGENCES SHOPIFY:
+- Utiliser {{ section.settings.* }} pour les options éditables
+- Implémenter {% for block in section.blocks %} pour éléments répétables
+- Ajouter {{ block.shopify_attributes }} sur chaque block
+- Filters d'images: {{ 'image.jpg' | image_url: width: 800 }}
+- Accessibilité WCAG AA (aria-labels, alt texts complets)
+- Support multilingue avec {{ 'key' | t }}
+
+FIDÉLITÉ VISUELLE:
+- Reproduis exactement les couleurs, typographie, espacements du screenshot
+- Respecte la hiérarchie visuelle et les proportions
+- Gère le responsive design intelligemment
+
+FORMAT DE RÉPONSE STRICT:
+
+\`\`\`liquid
+[Code complet du fichier .liquid]
+\`\`\`
+
+\`\`\`json
+[Schema.json complet et valide]
+\`\`\`
+
+\`\`\`css
+[CSS optimisé reproduisant le design du screenshot]
+\`\`\`
+
+\`\`\`javascript
+[JavaScript moderne si nécessaire]
+\`\`\`
+
+HTML CAPTURÉ (référence structure):
+\`\`\`html
+${html.substring(0, 6000)}
+\`\`\`
+
+Génère maintenant le code Shopify en respectant le screenshot.
+`;
 }
 
 // Fonction injectée dans Perplexity
-function submitToPerplexity(prompt) {
-  console.log('[Perplexity Injection] Script exécuté');
+function submitToPerplexity(prompt, screenshotDataUrl) {
+  console.log('[Perplexity Injection] Script exécuté avec screenshot');
 
-  // Attendre que la page soit prête
   setTimeout(async () => {
     try {
-      // Trouver le textarea
       const textarea = document.querySelector('textarea[placeholder*="Ask"]') ||
                        document.querySelector('textarea[aria-label*="Ask"]') ||
                        document.querySelector('textarea');
@@ -176,14 +279,16 @@ function submitToPerplexity(prompt) {
         throw new Error('Textarea introuvable');
       }
 
-      // Remplir le textarea
       textarea.value = prompt;
       textarea.focus();
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
       await new Promise(r => setTimeout(r, 500));
 
-      // Trouver et cliquer sur le bouton submit
+      // TODO: Attacher le screenshot si possible
+      // Note: Perplexity ne supporte pas toujours l'upload programmatique
+      // L'utilisateur devra peut-être le faire manuellement
+
       const submitButton = document.querySelector('button[type="submit"]') ||
                           document.querySelector('button[aria-label*="Send"]') ||
                           Array.from(document.querySelectorAll('button')).find(
@@ -197,7 +302,6 @@ function submitToPerplexity(prompt) {
       submitButton.click();
       console.log('[Perplexity Injection] Prompt soumis');
 
-      // Démarrer l'observation de la réponse
       observePerplexityResponse();
 
     } catch (error) {
@@ -210,14 +314,12 @@ function submitToPerplexity(prompt) {
   }, 1000);
 }
 
-// Observer la réponse (injecté via submitToPerplexity)
 function observePerplexityResponse() {
   let responseStarted = false;
   let lastContent = '';
   let stableCount = 0;
 
   const observer = new MutationObserver(() => {
-    // Chercher l'élément de réponse
     const responseElement = document.querySelector('[data-testid="answer-container"]') ||
                            document.querySelector('.prose') ||
                            document.querySelector('[class*="answer"]');
@@ -231,7 +333,6 @@ function observePerplexityResponse() {
       console.log('[Perplexity Observer] Réponse démarrée');
     }
 
-    // Détecter la stabilité (contenu ne change plus)
     if (currentContent === lastContent) {
       stableCount++;
     } else {
@@ -239,12 +340,10 @@ function observePerplexityResponse() {
       lastContent = currentContent;
     }
 
-    // Si stable pendant 3 itérations (~3s), considérer terminé
     if (responseStarted && stableCount >= 3) {
       observer.disconnect();
       console.log('[Perplexity Observer] Réponse complète');
 
-      // Extraire le code
       const extractedCode = extractCodeFromResponse(responseElement);
 
       chrome.runtime.sendMessage({
@@ -260,7 +359,6 @@ function observePerplexityResponse() {
     characterData: true
   });
 
-  // Timeout de sécurité (2 minutes)
   setTimeout(() => {
     observer.disconnect();
     chrome.runtime.sendMessage({
@@ -289,12 +387,27 @@ function extractCodeFromResponse(element) {
 }
 
 async function handlePerplexityResponse(data) {
-  console.log('[Perplexity Auto] Réponse reçue');
+  console.log('[Perplexity] Réponse reçue');
 
-  // Stocker la conversion
   await chrome.storage.local.set({ lastConversion: data });
 
-  // Ouvrir le panel de review
+  // Sauvegarder dans la bibliothèque
+  const capture = await chrome.storage.local.get('lastCapture');
+  if (capture.lastCapture) {
+    await saveSection({
+      name: `Section ${capture.lastCapture.blockType?.type || 'generic'}`,
+      url: capture.lastCapture.url,
+      blockType: capture.lastCapture.blockType,
+      complexity: capture.lastCapture.complexity,
+      liquid: data.liquid,
+      schema: data.schema,
+      css: data.css,
+      js: data.js,
+      thumbnail: capture.lastCapture.screenshot?.dataUrl,
+      conversionMethod: 'auto'
+    });
+  }
+
   await chrome.windows.create({
     url: chrome.runtime.getURL('src/popup/review.html'),
     type: 'popup',

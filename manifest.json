@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Shopify Section Converter",
-  "version": "1.0.0",
-  "description": "Capturez n'importe quelle section web et convertissez-la en section Shopify Liquid avec Perplexity Pro",
+  "version": "1.1.0",
+  "description": "Capturez n'importe quelle section web et convertissez-la en section Shopify Liquid avec Perplexity Pro + Screenshots PNG",
   "permissions": [
     "activeTab",
     "storage",
@@ -12,7 +12,8 @@
   ],
   "host_permissions": [
     "<all_urls>",
-    "https://www.perplexity.ai/*"
+    "https://www.perplexity.ai/*",
+    "https://cdnjs.cloudflare.com/*"
   ],
   "background": {
     "service_worker": "src/background/background.js",
@@ -49,8 +50,14 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["src/content/overlay.css"],
+      "resources": [
+        "src/content/overlay.css",
+        "src/lib/*.js"
+      ],
       "matches": ["<all_urls>"]
     }
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
 }
