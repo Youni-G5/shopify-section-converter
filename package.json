@@ -1,0 +1,21 @@
+{
+  "name": "shopify-section-converter",
+  "version": "1.0.0",
+  "description": "Chrome Extension pour convertir des sections web en sections Shopify Liquid",
+  "scripts": {
+    "dev": "echo 'Load extension from chrome://extensions in Developer mode'",
+    "build": "echo 'Build script coming soon'"
+  },
+  "keywords": [
+    "shopify",
+    "liquid",
+    "chrome-extension",
+    "web-scraping",
+    "perplexity",
+    "ai"
+  ],
+  "author": "Youni-G5",
+  "license": "MIT",
+  "devDependencies": {},
+  "dependencies": {}
+}
