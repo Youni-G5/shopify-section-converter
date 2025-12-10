@@ -1,11 +1,12 @@
 /**
  * Librairie d'analyse sémantique de blocs
  * Phase 2 - Détection intelligente du type de section
- * FIX: Gestion sécurisée de className
+ * FIX v1.1.3: Compatible avec objets simples (pas de DOM)
  */
 
 /**
  * Détecter le type de bloc/section
+ * Compatible avec un vrai élément DOM OU un objet simple {tagName, className, outerHTML}
  */
 export function detectBlockType(element) {
   const patterns = {
@@ -71,16 +72,18 @@ export function detectBlockType(element) {
     }
   };
 
-  // FIX: Gérer les cas où element n'a pas ces propriétés
+  // FIX: Gérer les cas où element est un objet simple ou un vrai DOM element
   const tagName = (element.tagName || '').toLowerCase();
   
-  // Fix className qui peut être undefined ou un objet SVG
+  // Fix className qui peut être undefined, string, ou un objet SVG
   let className = '';
   if (element.className) {
     if (typeof element.className === 'string') {
       className = element.className.toLowerCase();
     } else if (element.className.baseVal !== undefined) {
       className = element.className.baseVal.toLowerCase();
+    } else if (element.className.toString) {
+      className = element.className.toString().toLowerCase();
     }
   }
   
@@ -97,7 +100,7 @@ export function detectBlockType(element) {
       pattern.score += 2;
     }
     
-    // Vérifier les keywords dans class et id
+    // Vérifier les keywords dans class, id et HTML
     pattern.keywords.forEach(keyword => {
       if (className.includes(keyword)) pattern.score += 5;
       if (id.includes(keyword)) pattern.score += 5;
@@ -105,19 +108,23 @@ export function detectBlockType(element) {
       if (textContent.includes(keyword)) pattern.score += 1;
     });
     
-    // Bonus pour la structure HTML spécifique (seulement si element a querySelector)
-    if (element.querySelector) {
-      if (type === 'carousel' && element.querySelector('.slide, .swiper-slide, .carousel-item')) {
-        pattern.score += 10;
-      }
-      if (type === 'gallery' && element.querySelectorAll && element.querySelectorAll('img').length > 3) {
-        pattern.score += 8;
-      }
-      if (type === 'form' && element.querySelector('form')) {
-        pattern.score += 10;
-      }
-      if (type === 'faq' && element.querySelectorAll && element.querySelectorAll('.accordion, details, .collapse').length > 0) {
-        pattern.score += 10;
+    // Bonus pour la structure HTML spécifique (SEULEMENT si c'est un vrai DOM element)
+    if (element.querySelector && typeof element.querySelector === 'function') {
+      try {
+        if (type === 'carousel' && element.querySelector('.slide, .swiper-slide, .carousel-item')) {
+          pattern.score += 10;
+        }
+        if (type === 'gallery' && element.querySelectorAll && element.querySelectorAll('img').length > 3) {
+          pattern.score += 8;
+        }
+        if (type === 'form' && element.querySelector('form')) {
+          pattern.score += 10;
+        }
+        if (type === 'faq' && element.querySelectorAll && element.querySelectorAll('.accordion, details, .collapse').length > 0) {
+          pattern.score += 10;
+        }
+      } catch (e) {
+        // Ignorer les erreurs si querySelector ne fonctionne pas
       }
     }
   });
@@ -147,22 +154,29 @@ export function detectBlockType(element) {
 
 /**
  * Analyser la complexité d'un élément
+ * Compatible avec un vrai élément DOM OU un objet simple
  */
 export function analyzeComplexity(element) {
   // Protection si element est juste un objet avec outerHTML (background context)
-  if (!element.querySelectorAll) {
+  if (!element.querySelectorAll || typeof element.querySelectorAll !== 'function') {
+    // Estimer la complexité depuis le HTML brut
+    const html = element.outerHTML || '';
+    const tagCount = (html.match(/<[^>]+>/g) || []).length;
+    const estimatedScore = Math.min(Math.floor(tagCount / 20), 10);
+    
     return {
-      score: 5,
-      depth: 5,
-      elementCount: 0,
+      score: estimatedScore,
+      depth: Math.min(Math.floor(tagCount / 10), 15),
+      elementCount: tagCount,
       uniqueTags: 0,
-      hasJavaScript: false,
-      hasVideo: false,
-      imageCount: 0,
-      difficulty: 'medium'
+      hasJavaScript: html.includes('<script'),
+      hasVideo: html.includes('<video') || html.includes('youtube') || html.includes('vimeo'),
+      imageCount: (html.match(/<img/g) || []).length,
+      difficulty: estimatedScore < 4 ? 'easy' : estimatedScore < 7 ? 'medium' : 'hard'
     };
   }
   
+  // Si c'est un vrai DOM element
   const depth = calculateDOMDepth(element);
   const elementCount = element.querySelectorAll('*').length;
   const uniqueTags = new Set([...element.querySelectorAll('*')].map(el => el.tagName)).size;
@@ -204,7 +218,7 @@ export function analyzeComplexity(element) {
 }
 
 function calculateDOMDepth(element, currentDepth = 0) {
-  if (!element.children) return currentDepth;
+  if (!element || !element.children) return currentDepth;
   const children = element.children;
   if (children.length === 0) return currentDepth;
   
@@ -263,14 +277,22 @@ export function analyzeResponsive(element) {
 
 function hasFlexChildren(element) {
   if (!element.children || typeof window === 'undefined') return false;
-  return Array.from(element.children).some(child => 
-    window.getComputedStyle(child).display === 'flex'
-  );
+  try {
+    return Array.from(element.children).some(child => 
+      window.getComputedStyle(child).display === 'flex'
+    );
+  } catch (e) {
+    return false;
+  }
 }
 
 function hasGridChildren(element) {
   if (!element.children || typeof window === 'undefined') return false;
-  return Array.from(element.children).some(child => 
-    window.getComputedStyle(child).display === 'grid'
-  );
+  try {
+    return Array.from(element.children).some(child => 
+      window.getComputedStyle(child).display === 'grid'
+    );
+  } catch (e) {
+    return false;
+  }
 }
