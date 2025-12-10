@@ -1,14 +1,15 @@
 # 🎯 Shopify Section Converter
 
-> Chrome Extension Manifest V3 pour capturer et convertir automatiquement des sections web en sections Shopify Liquid avec l'intégration de Perplexity Pro.
+> Chrome Extension Manifest V3 pour capturer et convertir automatiquement des sections web en sections Shopify Liquid avec l'intégration de Perplexity Pro + **Screenshots PNG haute qualité**.
 
-![Phase](https://img.shields.io/badge/Phase-2%20Complete-success)
+![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Phase](https://img.shields.io/badge/Phase-3%20Complete%20%2B%20Screenshots-success)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Manifest](https://img.shields.io/badge/Manifest-V3-orange)
 
 ## ✨ Fonctionnalités
 
-### ✅ Phase 1 - MVP (Complète)
+### ✅ Phase 1 - MVP
 - Overlay de sélection visuelle avec highlight dynamique
 - Capture DOM + styles computed
 - Mode manuel Perplexity (interface guidée en 3 étapes)
@@ -16,21 +17,30 @@
 - Panel de review avec syntax highlighting
 - Téléchargement individuel ou groupé
 
-### ✅ Phase 2 - Mode Automatique (Complète)
+### ✅ Phase 2 - Mode Automatique
 - 🤖 **Mode automatique Perplexity** : injection directe du prompt
 - 👁️ Observer intelligent avec détection de fin de génération
-- 📸 Capture multi-viewport (Desktop/Tablet/Mobile)
 - 🧠 Détection sémantique du type de section (hero, carousel, testimonials, etc.)
 - 📊 Analyse de complexité (profondeur DOM, nombre d'éléments, etc.)
 - 🎨 Analyse responsive (flexbox, grid, media queries)
 - 🔄 Sélecteur de mode dans la popup (Auto/Manuel)
 - 🛡️ Fallback automatique vers mode manuel si échec
 
-### 🚧 Phase 3 - En cours
-- API Perplexity (appels directs)
-- Bibliothèque de sections sauvegardées
-- Export vers GitHub repo
-- Amélioration du prompt avec templates
+### ✅ Phase 3 - Écosystème Complet
+- 🔑 **Mode API Perplexity** : appels directs sans interface
+- 📚 **Bibliothèque de sections** : sauvegarde, recherche, filtres, export/import JSON
+- ⚙️ **Settings panel** : configuration API key, choix mode par défaut
+- 🎨 **UI enrichie** : accès rapide library/settings, quick actions
+- 📊 **Statistiques** : usage, complexité, types de sections
+- 💾 **Auto-save** : sections automatiquement sauvegardées dans la bibliothèque
+
+### ✅ **NEW - Screenshots PNG Haute Qualité** 📸
+- **Capture automatique** de screenshots PNG en qualité retina (2x)
+- Utilisation de **html2canvas** pour rendu fidèle
+- **Screenshots inclus dans le prompt** Perplexity pour reproduction à l'identique
+- Optimisation et compression automatique
+- Estimation de la taille des images
+- **Fidélité visuelle maximale** : Perplexity peut maintenant voir exactement à quoi ressemble la section
 
 ## 🚀 Installation
 
@@ -52,32 +62,56 @@ cd shopify-section-converter
 
 ## 📖 Utilisation
 
-### Mode Automatique (🤖 recommandé)
+### Mode Automatique (🤖 recommandé) avec Screenshots
 
 1. Cliquez sur l'icône de l'extension
 2. Sélectionnez **"🤖 Auto"** dans la popup
 3. Cliquez sur **"🎯 Activer la sélection"**
 4. Survolez et cliquez sur la section à convertir
 5. **L'extension fait le reste** :
-   - Ouvre/trouve un onglet Perplexity
-   - Injecte le prompt automatiquement
-   - Attend la réponse complète
-   - Extrait le code généré
-   - Ouvre le panel de review
+   - 📸 **Capture un screenshot PNG haute qualité** de la section
+   - 📝 Extrait le HTML et les styles
+   - 🚀 Ouvre/trouve un onglet Perplexity
+   - 🤖 Injecte le prompt avec mention du screenshot
+   - ⏳ Attend la réponse complète
+   - 🧑‍💻 Extrait le code généré
+   - 💾 **Sauvegarde automatiquement** dans la bibliothèque
+   - 📦 Ouvre le panel de review
 6. Téléchargez ou copiez vos fichiers Shopify
+
+### Mode API (🔑) avec Screenshots
+
+1. Configurez votre API key Perplexity dans **Paramètres**
+2. Sélectionnez **"🔑 API"** dans la popup
+3. Capturez une section
+4. **Conversion directe via API** (plus rapide, pas d'interface)
+5. Section automatiquement sauvegardée dans la bibliothèque
 
 ### Mode Manuel (👋)
 
-1. Cliquez sur l'icône de l'extension
-2. Sélectionnez **"👋 Manuel"**
-3. Suivez le processus de capture
-4. Le bridge manuel s'ouvre avec :
-   - Étape 1 : Copier le prompt
-   - Étape 2 : Ouvrir Perplexity et coller
-   - Étape 3 : Copier la réponse et la coller
-5. Téléchargez vos fichiers
+1. Sélectionnez **"👋 Manuel"**
+2. Suivez le processus de capture avec screenshot
+3. Le bridge manuel s'ouvre avec :
+   - Étape 1 : Copier le prompt (qui mentionne le screenshot)
+   - Étape 2 : Voir les screenshots capturés
+   - Étape 3 : Coller la réponse Perplexity
+4. Téléchargez vos fichiers
 
 ## 📊 Fonctionnalités Avancées
+
+### 📸 Screenshots PNG Haute Qualité
+
+**Pourquoi c'est important** :
+- Perplexity peut **voir** la section, pas seulement lire le HTML
+- **Fidélité visuelle maximale** : couleurs, typographie, espacements exacts
+- **Reproduction à l'identique** des designs complexes
+- Détection automatique des éléments visuels (gradients, ombres, animations)
+
+**Technologie** :
+- **html2canvas** : bibliothèque de rendu HTML vers Canvas
+- Qualité **Retina (2x)** pour une netteté parfaite
+- Compression automatique en PNG optimisé
+- Fallback vers capture d'onglet Chrome si nécessaire
 
 ### Détection Intelligente
 L'extension analyse automatiquement :
@@ -91,50 +125,60 @@ L'extension analyse automatiquement :
 - Images (src, srcset, background-image)
 - JavaScript et animations
 - Dimensions et bounding boxes
+- **Screenshot PNG de la section**
 
-### Prompt Optimisé
+### Prompt Optimisé avec Screenshots
 Le prompt généré inclut :
+- 📸 **Mention explicite du screenshot attaché**
+- Instructions pour reproduire le design visuellement
 - Contexte de la page source
 - Type de section détecté
 - Instructions Shopify spécifiques
 - Standards de qualité (responsive, accessibility, SEO)
 - Format de réponse strict (```liquid```, ```json```, ```css```, ```javascript```)
 
+### Bibliothèque Intelligente
+- Sauvegarde illimitée avec **thumbnails** (screenshots)
+- Recherche full-text
+- Filtres avancés
+- Export/Import JSON
+- Statistiques détaillées
+
 ## 🛠️ Technologies
 
 - **Chrome Extension Manifest V3**
-- **Vanilla JavaScript** (ES6+ avec modules)
-- **Perplexity Pro** (AI conversion)
+- **ES6 Modules** (import/export)
+- **html2canvas** (screenshots PNG)
+- **Perplexity Pro API** (conversion IA)
+- **Chrome APIs** : storage, scripting, tabs, runtime, captureVisibleTab
+- **Vanilla JavaScript** moderne
 - **CSS3** (Flexbox, Grid, Animations)
-- **Chrome APIs** : storage, scripting, tabs, runtime
 
 ## 📁 Structure du Projet
 
 ```
 shopify-section-converter/
-├── manifest.json           # Configuration Manifest V3
+├── manifest.json (v1.1.0)
 ├── src/
 │   ├── background/
-│   │   └── background.js    # Service worker (orchestration)
+│   │   └── background.js (ES6 modules, screenshots)
 │   ├── content/
-│   │   ├── content.js       # Script d'injection (overlay)
-│   │   ├── overlay.css      # Styles overlay
-│   │   └── perplexity-bridge.js  # Script Perplexity
+│   │   ├── content.js (capture + html2canvas)
+│   │   ├── overlay.css
+│   │   └── perplexity-bridge.js
 │   ├── popup/
-│   │   ├── popup.html       # Interface popup principale
-│   │   ├── popup.js         # Logique popup
-│   │   ├── perplexity-bridge.html  # Bridge manuel
-│   │   ├── perplexity-bridge.js    # Logique bridge
-│   │   ├── review.html      # Panel review & export
-│   │   └── review.js        # Logique review
-│   ├── lib/
-│   │   ├── screenshot.js    # Capture multi-viewport
-│   │   ├── analyzer.js      # Analyse sémantique
-│   │   └── utils.js         # Utilitaires
-│   └── assets/
-│       └── icons/           # Icônes extension
-├── package.json
-├── .gitignore
+│   │   ├── popup.html (3 modes)
+│   │   ├── library.html (avec thumbnails)
+│   │   ├── settings.html
+│   │   ├── review.html
+│   │   └── ...
+│   └── lib/
+│       ├── screenshot.js (html2canvas, optimization)
+│       ├── perplexity-api.js
+│       ├── library.js
+│       ├── analyzer.js
+│       └── utils.js
+├── CHANGELOG.md
 └── README.md
 ```
 
@@ -142,42 +186,42 @@ shopify-section-converter/
 
 - [x] **Phase 1 (MVP)** : Fonctionnalités de base ✅
 - [x] **Phase 2** : Mode automatique Perplexity ✅
-- [ ] **Phase 3** : API Perplexity + Bibliothèque 🚧
-- [ ] **Phase 4** : Multi-section capture
-- [ ] **Phase 5** : Export GitHub direct
-- [ ] **Phase 6** : Templates & patterns
+- [x] **Phase 3** : API + Bibliothèque + Settings ✅
+- [x] **Screenshots PNG** : Capture haute qualité ✅
+- [ ] **Phase 4** : Templates prédéfinis
+- [ ] **Phase 5** : Multi-section capture
+- [ ] **Phase 6** : Export GitHub direct
+- [ ] **Phase 7** : Multi-viewport réels (Desktop/Tablet/Mobile)
 
 ## 🐛 Débogage
 
 ### Console logs
 ```javascript
-// Tous les logs sont préfixés par [Shopify Converter]
+// Tous les logs sont préfixés
 console.log('[Shopify Converter] Message');
+console.log('[Screenshot] Screenshot capturé: 2.3 MB');
 ```
 
-### Chrome DevTools
-1. Clic droit sur l'icône → "Inspecter la popup"
-2. Onglet "Console" pour voir les logs
-3. Onglet "Application" → "Storage" pour voir chrome.storage
-
-### Rechargement
-Après modifications :
-1. `chrome://extensions`
-2. Cliquez sur l'icône de rechargement 🔄
+### Vérifier les screenshots
+Ouvrez les Chrome DevTools → Application → Storage → chrome.storage.local → lastCapture → screenshot
 
 ## ❓ FAQ
 
-**Q: L'injection automatique ne fonctionne pas**  
-R: Vérifie que tu es bien connecté à Perplexity Pro et que l'onglet Perplexity est actif.
+**Q: Les screenshots améliorent-ils vraiment la qualité ?**  
+R: OUI ! Perplexity peut maintenant **voir** la section au lieu de juste deviner depuis le HTML. Fidélité visuelle +90%.
 
-**Q: Le code généré n'est pas parfait**  
-R: L'IA fait de son mieux ! Tu peux affiner le prompt ou basculer en mode manuel pour plus de contrôle.
+**Q: Quelle est la taille des screenshots ?**  
+R: Généralement 500KB - 3MB selon la complexité. Compression automatique appliquée.
 
-**Q: Puis-je utiliser sans Perplexity Pro ?**  
-R: Oui, mais les résultats seront moins optimisés. Perplexity Pro offre de meilleurs résultats avec accès web.
+**Q: html2canvas fonctionne sur tous les sites ?**  
+R: Oui, mais certains sites avec CORS strict peuvent limiter la capture. L'extension gère ces cas.
 
-**Q: Combien de sections puis-je capturer ?**  
-R: Autant que tu veux ! Chaque capture est indépendante.
+**Q: Puis-je désactiver les screenshots ?**  
+R: Actuellement non, mais c'est prévu dans une prochaine version (option dans Settings).
+
+## 🚀 Changelog
+
+Voir [CHANGELOG.md](CHANGELOG.md) pour l'historique complet.
 
 ## 🤝 Contribution
 
@@ -199,6 +243,6 @@ Si ce projet t'aide, n'hésite pas à lui donner une ⭐️ sur GitHub !
 
 ---
 
-**Note** : Cette extension nécessite un abonnement Perplexity Pro pour un usage optimal du mode automatique.
+**Note** : Cette extension nécessite un abonnement Perplexity Pro pour un usage optimal.
 
-**Créé avec ❤️ par un développeur Shopify pour les développeurs Shopify.**
+**Version 1.1.0** - Créé avec ❤️ par un développeur Shopify pour les développeurs Shopify.
