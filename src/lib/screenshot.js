@@ -1,92 +1,63 @@
 /**
- * Librairie utilitaire pour la capture de screenshots
- * Phase 2 - Screenshots multi-viewport réels
+ * Screenshot Manager - Amélioration Phase 3+
+ * Capture de screenshots réels PNG pour améliorer la qualité de conversion
  */
 
 /**
- * Capturer des screenshots à différents viewports
+ * Capturer un screenshot de l'élément sélectionné avec html2canvas
  */
-export async function captureMultiViewport(element) {
-  const screenshots = {};
-  
-  const viewports = [
-    { name: 'desktop', width: 1920, height: 1080 },
-    { name: 'tablet', width: 768, height: 1024 },
-    { name: 'mobile', width: 375, height: 667 }
-  ];
-
-  // Sauvegarder le viewport actuel
-  const originalWidth = window.innerWidth;
-  const originalHeight = window.innerHeight;
-  const originalScroll = { x: window.scrollX, y: window.scrollY };
-
-  for (const viewport of viewports) {
-    try {
-      // Capturer au viewport actuel (pour le MVP)
-      // Note: Le redimensionnement réel de fenêtre n'est pas possible depuis content script
-      // Une vraie implémentation nécessiterait l'API chrome.windows ou puppeteer
-      
-      const rect = element.getBoundingClientRect();
-      
-      // Capturer via html2canvas si disponible, sinon faire un screenshot basique
-      const canvas = await captureElementToCanvas(element);
-      const dataUrl = canvas ? canvas.toDataURL('image/png') : null;
-      
-      screenshots[viewport.name] = {
-        viewport: { width: viewport.width, height: viewport.height },
-        elementRect: rect.toJSON(),
-        screenshot: dataUrl,
-        timestamp: Date.now()
-      };
-      
-    } catch (error) {
-      console.error(`[Screenshot] Erreur pour ${viewport.name}:`, error);
-      screenshots[viewport.name] = {
-        viewport: { width: viewport.width, height: viewport.height },
-        error: error.message
-      };
-    }
-  }
-
-  return screenshots;
-}
-
-/**
- * Capturer un élément en canvas (version simplifiée)
- */
-async function captureElementToCanvas(element) {
+export async function captureElementScreenshot(element) {
   try {
-    // Créer un canvas de la taille de l'élément
+    // Charger html2canvas dynamiquement si nécessaire
+    if (typeof html2canvas === 'undefined') {
+      await loadHtml2Canvas();
+    }
+
     const rect = element.getBoundingClientRect();
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
     
-    canvas.width = rect.width * 2; // 2x pour retina
-    canvas.height = rect.height * 2;
-    ctx.scale(2, 2);
-    
-    // Dessiner le fond
-    const bgColor = window.getComputedStyle(element).backgroundColor;
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(0, 0, rect.width, rect.height);
-    
-    // Note: Une vraie implémentation utiliserait html2canvas ou chrome.tabs.captureVisibleTab
-    // Pour le MVP, on retourne un canvas de base avec les dimensions
-    
-    return canvas;
-    
+    // Scroll vers l'élément si nécessaire
+    const originalScroll = { x: window.scrollX, y: window.scrollY };
+    element.scrollIntoView({ behavior: 'instant', block: 'center' });
+    await sleep(300);
+
+    // Capturer avec html2canvas
+    const canvas = await html2canvas(element, {
+      backgroundColor: null,
+      scale: 2, // Retina quality
+      logging: false,
+      useCORS: true,
+      allowTaint: true,
+      imageTimeout: 0,
+      removeContainer: true
+    });
+
+    // Restaurer le scroll original
+    window.scrollTo(originalScroll.x, originalScroll.y);
+
+    // Convertir en base64
+    const dataUrl = canvas.toDataURL('image/png', 0.9);
+
+    return {
+      dataUrl: dataUrl,
+      width: canvas.width,
+      height: canvas.height,
+      naturalWidth: rect.width,
+      naturalHeight: rect.height,
+      size: estimateBase64Size(dataUrl)
+    };
+
   } catch (error) {
-    console.error('[Canvas] Erreur:', error);
+    console.error('[Screenshot] Erreur html2canvas:', error);
     return null;
   }
 }
 
 /**
- * Capturer la page visible (nécessite permission depuis background)
+ * Capturer via l'API Chrome (tab screenshot)
  */
-export async function captureVisibleTab() {
+export async function captureTabScreenshot() {
   return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage({ action: 'captureTab' }, (response) => {
+    chrome.runtime.sendMessage({ action: 'captureTabScreenshot' }, (response) => {
       if (response && response.dataUrl) {
         resolve(response.dataUrl);
       } else {
@@ -97,37 +68,135 @@ export async function captureVisibleTab() {
 }
 
 /**
- * Extraire les images d'un élément
+ * Capturer l'élément avec crop de la tab screenshot
  */
-export function extractImages(element) {
-  const images = [];
+export async function captureElementFromTab(element) {
+  try {
+    // Capturer la tab complète
+    const tabScreenshot = await captureTabScreenshot();
+    
+    // Obtenir la position de l'élément
+    const rect = element.getBoundingClientRect();
+    
+    // Créer un canvas pour cropper
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    const scale = 2; // Retina
+    canvas.width = rect.width * scale;
+    canvas.height = rect.height * scale;
+    ctx.scale(scale, scale);
+    
+    // Charger l'image
+    const img = await loadImage(tabScreenshot);
+    
+    // Crop sur l'élément
+    ctx.drawImage(
+      img,
+      rect.left, rect.top, rect.width, rect.height,
+      0, 0, rect.width, rect.height
+    );
+    
+    return {
+      dataUrl: canvas.toDataURL('image/png', 0.9),
+      width: canvas.width,
+      height: canvas.height,
+      method: 'tab-crop'
+    };
+    
+  } catch (error) {
+    console.error('[Screenshot] Erreur tab capture:', error);
+    return null;
+  }
+}
+
+/**
+ * Capturer multi-viewport réels
+ */
+export async function captureMultiViewportReal(element) {
+  const screenshots = {};
   
-  // Images <img>
-  element.querySelectorAll('img').forEach(img => {
-    images.push({
-      type: 'img',
-      src: img.src,
-      alt: img.alt,
-      width: img.width,
-      height: img.height
-    });
-  });
+  // Viewport actuel (le plus fiable)
+  console.log('[Screenshot] Capture viewport actuel...');
+  const current = await captureElementScreenshot(element);
+  if (current) {
+    screenshots.current = current;
+  }
   
-  // Background images
-  const allElements = [element, ...element.querySelectorAll('*')];
-  allElements.forEach(el => {
-    const bgImage = window.getComputedStyle(el).backgroundImage;
-    if (bgImage && bgImage !== 'none') {
-      const urlMatch = bgImage.match(/url\(["']?([^"')]+)["']?\)/);
-      if (urlMatch) {
-        images.push({
-          type: 'background',
-          src: urlMatch[1],
-          element: el.tagName
-        });
-      }
+  // Note: Les autres viewports nécessiteraient de redimensionner la fenêtre
+  // ce qui n'est pas possible depuis un content script
+  // On peut simuler avec des media queries CSS
+  
+  return screenshots;
+}
+
+/**
+ * Charger html2canvas dynamiquement
+ */
+function loadHtml2Canvas() {
+  return new Promise((resolve, reject) => {
+    if (typeof html2canvas !== 'undefined') {
+      resolve();
+      return;
     }
+
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Impossible de charger html2canvas'));
+    document.head.appendChild(script);
   });
+}
+
+/**
+ * Charger une image
+ */
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+/**
+ * Estimer la taille d'un base64
+ */
+function estimateBase64Size(base64) {
+  const bytes = (base64.length * 3) / 4;
+  if (bytes < 1024) return bytes.toFixed(0) + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Optimiser un screenshot (compression)
+ */
+export async function optimizeScreenshot(dataUrl, maxWidth = 1920) {
+  const img = await loadImage(dataUrl);
   
-  return images;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  
+  // Redimensionner si trop grand
+  let width = img.width;
+  let height = img.height;
+  
+  if (width > maxWidth) {
+    const ratio = maxWidth / width;
+    width = maxWidth;
+    height = height * ratio;
+  }
+  
+  canvas.width = width;
+  canvas.height = height;
+  
+  ctx.drawImage(img, 0, 0, width, height);
+  
+  return canvas.toDataURL('image/jpeg', 0.85); // JPEG pour meilleure compression
 }

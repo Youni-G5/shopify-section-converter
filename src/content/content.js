@@ -1,6 +1,8 @@
 /**
- * Content Script - Phase 2 avec mode auto
+ * Content Script - Phase 3+ avec screenshots réels
  */
+
+import { captureElementScreenshot, captureMultiViewportReal } from '../lib/screenshot.js';
 
 let isSelectionMode = false;
 let selectionOverlay = null;
@@ -8,7 +10,6 @@ let selectedElement = null;
 let highlightBox = null;
 let conversionMode = 'auto';
 
-// Écouter les messages du background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'startSelection') {
     conversionMode = message.mode || 'auto';
@@ -73,7 +74,7 @@ function createOverlay() {
           👆 Survolez et cliquez sur la section à capturer
         </p>
         <div class="sc-mode-badge">
-          Mode: <strong>${conversionMode === 'auto' ? '🤖 Automatique' : '👋 Manuel'}</strong>
+          Mode: <strong>${conversionMode === 'auto' ? '🤖 Automatique' : conversionMode === 'api' ? '🔑 API' : '👋 Manuel'}</strong>
         </div>
         <div class="sc-info" id="sc-element-info">
           <div class="sc-info-item">
@@ -166,10 +167,16 @@ function handleKeyDown(e) {
 
 async function captureElement(element) {
   try {
-    console.log('[Shopify Converter] Démarrage de la capture...');
+    console.log('[Shopify Converter] Démarrage de la capture avec screenshots...');
     
     stopSelectionMode();
-    showLoader();
+    showLoader('Capture en cours...');
+    
+    // Capturer le screenshot AVANT de masquer l'élément
+    updateLoader('📸 Capture du screenshot...');
+    const screenshot = await captureElementScreenshot(element);
+    
+    updateLoader('📝 Extraction des données...');
     
     const captureData = {
       html: element.outerHTML,
@@ -177,12 +184,15 @@ async function captureElement(element) {
       boundingBox: element.getBoundingClientRect().toJSON(),
       tagName: element.tagName,
       className: element.className,
-      screenshots: await captureScreenshots(element),
+      screenshot: screenshot, // Screenshot réel
       url: window.location.href,
       timestamp: Date.now()
     };
     
+    console.log('[Shopify Converter] Screenshot capturé:', screenshot?.size || 'N/A');
     console.log('[Shopify Converter] Données capturées, mode:', conversionMode);
+    
+    updateLoader('🚀 Envoi au background...');
     
     chrome.runtime.sendMessage({
       action: 'elementCaptured',
@@ -191,8 +201,9 @@ async function captureElement(element) {
     }, (response) => {
       hideLoader();
       if (response && response.success) {
-        showSuccessMessage(conversionMode === 'auto' ? 
-          'Capture envoyée à Perplexity...' : 
+        showSuccessMessage(
+          conversionMode === 'auto' ? 'Capture envoyée à Perplexity...' :
+          conversionMode === 'api' ? 'Conversion en cours via API...' :
           'Section capturée avec succès !'
         );
       } else {
@@ -229,27 +240,23 @@ function getComputedStylesRecursive(element, depth = 0, maxDepth = 3) {
   return styles;
 }
 
-async function captureScreenshots(element) {
-  const rect = element.getBoundingClientRect();
-  
-  return {
-    desktop: {
-      viewport: { width: window.innerWidth, height: window.innerHeight },
-      elementRect: rect.toJSON()
-    }
-  };
-}
-
-function showLoader() {
+function showLoader(message = 'Capture en cours...') {
   const loader = document.createElement('div');
   loader.id = 'sc-loader';
   loader.innerHTML = `
     <div class="sc-loader-content">
       <div class="sc-spinner"></div>
-      <p>Capture en cours...</p>
+      <p id="sc-loader-message">${message}</p>
     </div>
   `;
   document.body.appendChild(loader);
+}
+
+function updateLoader(message) {
+  const loaderMessage = document.getElementById('sc-loader-message');
+  if (loaderMessage) {
+    loaderMessage.textContent = message;
+  }
 }
 
 function hideLoader() {
@@ -275,4 +282,4 @@ function showErrorMessage(error) {
   setTimeout(() => message.remove(), 5000);
 }
 
-console.log('[Shopify Converter] Content script Phase 2 chargé');
+console.log('[Shopify Converter] Content script Phase 3+ chargé avec screenshots');
