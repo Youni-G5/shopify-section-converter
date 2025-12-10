@@ -7,45 +7,80 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      width: 320px;
-      padding: 16px;
+      width: 350px;
+      padding: 0;
       background: #f5f5f5;
     }
-    .card {
-      background: #ffffff;
-      border-radius: 12px;
-      padding: 16px;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
-    }
     .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+    .header h1 {
+      font-size: 16px;
+      margin-bottom: 5px;
+    }
+    .header p {
+      font-size: 12px;
+      opacity: 0.9;
+    }
+    .content {
+      padding: 20px;
+    }
+    .section {
+      background: white;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 10px;
       display: flex;
       align-items: center;
+      gap: 6px;
+    }
+    .mode-selector {
+      display: flex;
       gap: 8px;
       margin-bottom: 12px;
     }
-    .icon {
-      width: 28px;
-      height: 28px;
-      border-radius: 8px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    .mode-btn {
+      flex: 1;
+      padding: 8px;
+      border: 2px solid #e5e7eb;
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+      font-size: 12px;
+      text-align: center;
+      transition: all 0.2s;
+    }
+    .mode-btn:hover {
+      border-color: #667eea;
+      background: #f5f3ff;
+    }
+    .mode-btn.active {
+      border-color: #667eea;
+      background: #667eea;
       color: white;
-      font-size: 18px;
     }
-    h1 {
-      font-size: 15px;
-      color: #111827;
+    .mode-label {
+      font-weight: 600;
+      display: block;
+      margin-bottom: 2px;
     }
-    p {
-      font-size: 13px;
-      color: #4b5563;
-      margin-bottom: 12px;
+    .mode-desc {
+      font-size: 10px;
+      opacity: 0.8;
     }
     button {
       width: 100%;
-      padding: 10px 14px;
+      padding: 12px;
       border-radius: 8px;
       border: none;
       background: #4CAF50;
@@ -56,35 +91,68 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
-      transition: background 0.2s, transform 0.1s, box-shadow 0.1s;
-      margin-bottom: 8px;
+      gap: 8px;
+      transition: all 0.2s;
     }
     button:hover {
       background: #45a049;
       transform: translateY(-1px);
-      box-shadow: 0 4px 10px rgba(76, 175, 80, 0.3);
+      box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
     }
-    .hint {
+    button:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .footer {
+      padding: 12px 20px;
+      text-align: center;
       font-size: 11px;
       color: #6b7280;
-      text-align: center;
+      background: white;
+      border-top: 1px solid #e5e7eb;
+    }
+    .footer a {
+      color: #667eea;
+      text-decoration: none;
     }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="header">
-      <div class="icon">🧩</div>
-      <div>
-        <h1>Shopify Section Converter</h1>
-        <p>Capture une section et prépare-la pour Perplexity.</p>
+  <div class="header">
+    <h1>🧩 Shopify Section Converter</h1>
+    <p>Phase 2 - Mode Auto activé</p>
+  </div>
+
+  <div class="content">
+    <div class="section">
+      <div class="section-title">
+        ⚙️ Mode de conversion
+      </div>
+      <div class="mode-selector">
+        <div class="mode-btn" data-mode="manual">
+          <span class="mode-label">👋 Manuel</span>
+          <span class="mode-desc">Tu copies/colles</span>
+        </div>
+        <div class="mode-btn active" data-mode="auto">
+          <span class="mode-label">🤖 Auto</span>
+          <span class="mode-desc">Injection directe</span>
+        </div>
       </div>
     </div>
-    <button id="startSelection">
-      🎯 Activer la sélection
-    </button>
-    <p class="hint">Survole puis clique sur la section à convertir.</p>
+
+    <div class="section">
+      <div class="section-title">
+        🎯 Capture de section
+      </div>
+      <button id="startSelection">
+        📸 Activer la sélection
+      </button>
+    </div>
+  </div>
+
+  <div class="footer">
+    Made with ❤️ by <a href="https://github.com/Youni-G5" target="_blank">Youni-G5</a>
   </div>
 
   <script src="popup.js"></script>

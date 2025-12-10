@@ -1,16 +1,17 @@
 /**
- * Content Script - Overlay de sélection visuelle
- * Injecté sur toutes les pages (sauf Perplexity)
+ * Content Script - Phase 2 avec mode auto
  */
 
 let isSelectionMode = false;
 let selectionOverlay = null;
 let selectedElement = null;
 let highlightBox = null;
+let conversionMode = 'auto';
 
 // Écouter les messages du background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'startSelection') {
+    conversionMode = message.mode || 'auto';
     startSelectionMode();
     sendResponse({ success: true });
   } else if (message.action === 'stopSelection') {
@@ -20,36 +21,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
-/**
- * Démarrer le mode de sélection
- */
 function startSelectionMode() {
   if (isSelectionMode) return;
   
   isSelectionMode = true;
   document.body.style.cursor = 'crosshair';
   
-  // Créer l'overlay
   createOverlay();
   
-  // Ajouter les event listeners
   document.addEventListener('mousemove', handleMouseMove);
   document.addEventListener('click', handleClick);
   document.addEventListener('keydown', handleKeyDown);
   
-  console.log('[Shopify Converter] Mode sélection activé');
+  console.log('[Shopify Converter] Mode sélection activé -', conversionMode);
 }
 
-/**
- * Arrêter le mode de sélection
- */
 function stopSelectionMode() {
   if (!isSelectionMode) return;
   
   isSelectionMode = false;
   document.body.style.cursor = '';
   
-  // Supprimer l'overlay
   if (selectionOverlay) {
     selectionOverlay.remove();
     selectionOverlay = null;
@@ -60,7 +52,6 @@ function stopSelectionMode() {
     highlightBox = null;
   }
   
-  // Retirer les event listeners
   document.removeEventListener('mousemove', handleMouseMove);
   document.removeEventListener('click', handleClick);
   document.removeEventListener('keydown', handleKeyDown);
@@ -68,9 +59,6 @@ function stopSelectionMode() {
   console.log('[Shopify Converter] Mode sélection désactivé');
 }
 
-/**
- * Créer l'overlay de sélection
- */
 function createOverlay() {
   selectionOverlay = document.createElement('div');
   selectionOverlay.id = 'shopify-converter-overlay';
@@ -84,6 +72,9 @@ function createOverlay() {
         <p class="sc-instruction">
           👆 Survolez et cliquez sur la section à capturer
         </p>
+        <div class="sc-mode-badge">
+          Mode: <strong>${conversionMode === 'auto' ? '🤖 Automatique' : '👋 Manuel'}</strong>
+        </div>
         <div class="sc-info" id="sc-element-info">
           <div class="sc-info-item">
             <span class="sc-label">Tag:</span>
@@ -109,27 +100,19 @@ function createOverlay() {
   
   document.body.appendChild(selectionOverlay);
   
-  // Event listeners pour les boutons
   document.getElementById('sc-close-btn').addEventListener('click', stopSelectionMode);
   document.getElementById('sc-cancel-btn').addEventListener('click', stopSelectionMode);
 }
 
-/**
- * Highlight de l'élément sous la souris
- */
 function handleMouseMove(e) {
   if (!isSelectionMode) return;
-  
-  // Ignorer si on survole le panel
   if (e.target.closest('#shopify-converter-overlay')) return;
   
   const element = e.target;
   selectedElement = element;
   
-  // Mettre à jour les infos
   updateElementInfo(element);
   
-  // Créer ou mettre à jour la highlight box
   if (!highlightBox) {
     highlightBox = document.createElement('div');
     highlightBox.id = 'sc-highlight-box';
@@ -151,9 +134,6 @@ function handleMouseMove(e) {
   `;
 }
 
-/**
- * Mettre à jour les informations de l'élément
- */
 function updateElementInfo(element) {
   const tag = element.tagName.toLowerCase();
   const classes = element.className ? element.className.toString().split(' ').slice(0, 3).join(', ') : 'Aucune';
@@ -165,49 +145,32 @@ function updateElementInfo(element) {
   document.getElementById('sc-dimensions').textContent = dimensions;
 }
 
-/**
- * Gérer le clic pour capturer
- */
 function handleClick(e) {
   if (!isSelectionMode) return;
-  
-  // Ignorer si on clique sur le panel
   if (e.target.closest('#shopify-converter-overlay')) return;
   
   e.preventDefault();
   e.stopPropagation();
   
   const element = e.target;
-  
   console.log('[Shopify Converter] Élément sélectionné:', element);
   
-  // Capturer l'élément
   captureElement(element);
 }
 
-/**
- * Gérer les touches clavier
- */
 function handleKeyDown(e) {
   if (e.key === 'Escape') {
     stopSelectionMode();
   }
 }
 
-/**
- * Capturer l'élément sélectionné
- */
 async function captureElement(element) {
   try {
     console.log('[Shopify Converter] Démarrage de la capture...');
     
-    // Arrêter le mode sélection
     stopSelectionMode();
-    
-    // Afficher un loader
     showLoader();
     
-    // Capturer les données
     const captureData = {
       html: element.outerHTML,
       computedStyles: getComputedStylesRecursive(element),
@@ -219,16 +182,19 @@ async function captureElement(element) {
       timestamp: Date.now()
     };
     
-    console.log('[Shopify Converter] Données capturées:', captureData);
+    console.log('[Shopify Converter] Données capturées, mode:', conversionMode);
     
-    // Envoyer au background script
     chrome.runtime.sendMessage({
       action: 'elementCaptured',
-      data: captureData
+      data: captureData,
+      mode: conversionMode
     }, (response) => {
       hideLoader();
       if (response && response.success) {
-        showSuccessMessage();
+        showSuccessMessage(conversionMode === 'auto' ? 
+          'Capture envoyée à Perplexity...' : 
+          'Section capturée avec succès !'
+        );
       } else {
         showErrorMessage(response?.error || 'Erreur inconnue');
       }
@@ -241,16 +207,12 @@ async function captureElement(element) {
   }
 }
 
-/**
- * Récupérer les styles computed récursivement
- */
 function getComputedStylesRecursive(element, depth = 0, maxDepth = 3) {
   if (depth > maxDepth) return {};
   
   const styles = {};
   const computed = window.getComputedStyle(element);
   
-  // Propriétés CSS importantes
   const importantProps = [
     'display', 'position', 'width', 'height', 'margin', 'padding',
     'background', 'backgroundColor', 'backgroundImage', 'backgroundSize',
@@ -267,12 +229,7 @@ function getComputedStylesRecursive(element, depth = 0, maxDepth = 3) {
   return styles;
 }
 
-/**
- * Capturer des screenshots multi-viewport
- */
 async function captureScreenshots(element) {
-  // Pour le MVP, on capture juste la position actuelle
-  // Les screenshots multi-viewport seront implémentés plus tard
   const rect = element.getBoundingClientRect();
   
   return {
@@ -283,9 +240,6 @@ async function captureScreenshots(element) {
   };
 }
 
-/**
- * Afficher un loader
- */
 function showLoader() {
   const loader = document.createElement('div');
   loader.id = 'sc-loader';
@@ -298,29 +252,20 @@ function showLoader() {
   document.body.appendChild(loader);
 }
 
-/**
- * Masquer le loader
- */
 function hideLoader() {
   const loader = document.getElementById('sc-loader');
   if (loader) loader.remove();
 }
 
-/**
- * Afficher un message de succès
- */
-function showSuccessMessage() {
+function showSuccessMessage(text) {
   const message = document.createElement('div');
   message.className = 'sc-message sc-success';
-  message.innerHTML = '✅ Section capturée avec succès !';
+  message.innerHTML = '✅ ' + text;
   document.body.appendChild(message);
   
   setTimeout(() => message.remove(), 3000);
 }
 
-/**
- * Afficher un message d'erreur
- */
 function showErrorMessage(error) {
   const message = document.createElement('div');
   message.className = 'sc-message sc-error';
@@ -330,4 +275,4 @@ function showErrorMessage(error) {
   setTimeout(() => message.remove(), 5000);
 }
 
-console.log('[Shopify Converter] Content script chargé');
+console.log('[Shopify Converter] Content script Phase 2 chargé');
