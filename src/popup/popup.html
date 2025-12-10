@@ -16,6 +16,7 @@
       color: white;
       padding: 20px;
       text-align: center;
+      position: relative;
     }
     .header h1 {
       font-size: 16px;
@@ -24,6 +25,31 @@
     .header p {
       font-size: 12px;
       opacity: 0.9;
+    }
+    .header-actions {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      display: flex;
+      gap: 8px;
+    }
+    .icon-btn {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: white;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      font-size: 16px;
+    }
+    .icon-btn:hover {
+      background: rgba(255,255,255,0.3);
+      transform: scale(1.1);
     }
     .content {
       padding: 20px;
@@ -78,7 +104,7 @@
       font-size: 10px;
       opacity: 0.8;
     }
-    button {
+    button.primary-btn {
       width: 100%;
       padding: 12px;
       border-radius: 8px;
@@ -94,15 +120,39 @@
       gap: 8px;
       transition: all 0.2s;
     }
-    button:hover {
+    button.primary-btn:hover {
       background: #45a049;
       transform: translateY(-1px);
       box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
     }
-    button:disabled {
+    button.primary-btn:disabled {
       background: #9ca3af;
       cursor: not-allowed;
       transform: none;
+    }
+    .quick-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .quick-btn {
+      padding: 10px;
+      border: 2px solid #e5e7eb;
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .quick-btn:hover {
+      border-color: #667eea;
+      background: #f5f3ff;
     }
     .footer {
       padding: 12px 20px;
@@ -120,8 +170,12 @@
 </head>
 <body>
   <div class="header">
+    <div class="header-actions">
+      <button class="icon-btn" id="libraryBtn" title="Bibliothèque">📚</button>
+      <button class="icon-btn" id="settingsBtn" title="Paramètres">⚙️</button>
+    </div>
     <h1>🧩 Shopify Section Converter</h1>
-    <p>Phase 2 - Mode Auto activé</p>
+    <p>Phase 3 - API + Library</p>
   </div>
 
   <div class="content">
@@ -132,11 +186,15 @@
       <div class="mode-selector">
         <div class="mode-btn" data-mode="manual">
           <span class="mode-label">👋 Manuel</span>
-          <span class="mode-desc">Tu copies/colles</span>
+          <span class="mode-desc">Copy/paste</span>
         </div>
         <div class="mode-btn active" data-mode="auto">
           <span class="mode-label">🤖 Auto</span>
-          <span class="mode-desc">Injection directe</span>
+          <span class="mode-desc">Injection</span>
+        </div>
+        <div class="mode-btn" data-mode="api">
+          <span class="mode-label">🔑 API</span>
+          <span class="mode-desc">Direct</span>
         </div>
       </div>
     </div>
@@ -145,9 +203,20 @@
       <div class="section-title">
         🎯 Capture de section
       </div>
-      <button id="startSelection">
+      <button class="primary-btn" id="startSelection">
         📸 Activer la sélection
       </button>
+      
+      <div class="quick-actions">
+        <button class="quick-btn" id="lastCaptureBtn">
+          <span>🕙</span>
+          <span>Dernière capture</span>
+        </button>
+        <button class="quick-btn" id="statsBtn">
+          <span>📊</span>
+          <span>Statistiques</span>
+        </button>
+      </div>
     </div>
   </div>
 

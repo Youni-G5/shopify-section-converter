@@ -1,4 +1,4 @@
-// Popup - Phase 2 avec sélecteur de mode
+// Popup principale - Phase 3
 
 let selectedMode = 'auto';
 
@@ -21,7 +21,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Bouton de sélection
   document.getElementById('startSelection').addEventListener('click', async () => {
-    // Envoyer le mode au background
+    // Vérifier si le mode API est configuré
+    if (selectedMode === 'api') {
+      const apiData = await chrome.storage.sync.get('perplexityAPIKey');
+      if (!apiData.perplexityAPIKey) {
+        alert('⚠️ API key Perplexity non configurée.\nRendez-vous dans Paramètres pour la configurer.');
+        return;
+      }
+    }
+    
     chrome.runtime.sendMessage({ 
       action: 'startSelectionFromPopup',
       mode: selectedMode 
@@ -29,8 +37,61 @@ document.addEventListener('DOMContentLoaded', async () => {
       window.close();
     });
   });
+  
+  // Bibliothèque
+  document.getElementById('libraryBtn').addEventListener('click', async () => {
+    await chrome.windows.create({
+      url: chrome.runtime.getURL('src/popup/library.html'),
+      type: 'popup',
+      width: 1200,
+      height: 800,
+      focused: true
+    });
+    window.close();
+  });
+  
+  // Paramètres
+  document.getElementById('settingsBtn').addEventListener('click', async () => {
+    await chrome.windows.create({
+      url: chrome.runtime.getURL('src/popup/settings.html'),
+      type: 'popup',
+      width: 450,
+      height: 600,
+      focused: true
+    });
+    window.close();
+  });
+  
+  // Dernière capture
+  document.getElementById('lastCaptureBtn').addEventListener('click', async () => {
+    const data = await chrome.storage.local.get('lastConversion');
+    if (data.lastConversion) {
+      await chrome.windows.create({
+        url: chrome.runtime.getURL('src/popup/review.html'),
+        type: 'popup',
+        width: 1000,
+        height: 700,
+        focused: true
+      });
+      window.close();
+    } else {
+      alert('⚠️ Aucune capture récente trouvée.');
+    }
+  });
+  
+  // Stats
+  document.getElementById('statsBtn').addEventListener('click', async () => {
+    await chrome.windows.create({
+      url: chrome.runtime.getURL('src/popup/library.html'),
+      type: 'popup',
+      width: 1200,
+      height: 800,
+      focused: true
+    });
+    window.close();
+  });
 
-  console.log('[Shopify Converter] Popup Phase 2 chargée - Mode:', selectedMode);
+  console.log('[Shopify Converter] Popup Phase 3 chargée - Mode:', selectedMode);
 });
 
 function updateModeUI() {
