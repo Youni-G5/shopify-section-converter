@@ -1,14 +1,17 @@
 /**
- * Bridge manuel Perplexity - Version complète avec screenshots
+ * Bridge manuel Perplexity - HTML complet
  */
 
 function buildPromptFromCapture(capture) {
-  const { html, url, tagName, className, blockType, complexity, screenshot } = capture;
+  const { html, url, tagName, className, blockType, complexity, screenshot, computedStyle } = capture;
+
+  // Extraire les styles CSS importants
+  const importantStyles = extractImportantStyles(computedStyle);
 
   return `
 CONVERSION SHOPIFY SECTION AVEC SCREENSHOT
 
-${screenshot ? '📸 UN SCREENSHOT DE LA SECTION EST DISPONIBLE CI-DESSOUS. Utilise-le pour reproduire le design à l\'identique.' : ''}
+${screenshot ? '📸 UN SCREENSHOT PROPRE DE LA SECTION EST DISPONIBLE. Utilise-le pour reproduire le design à l\'identique.' : ''}
 
 CONTEXTE:
 - Page source: ${url}
@@ -55,13 +58,40 @@ FORMAT DE RÉPONSE STRICT:
 [JavaScript moderne si nécessaire]
 \`\`\`
 
-HTML CAPTURÉ (référence structure):
+STYLES CSS APPLIQUÉS (référence):
+\`\`\`css
+${importantStyles}
+\`\`\`
+
+HTML COMPLET DE LA SECTION:
 \`\`\`html
-${html.substring(0, 8000)}${html.length > 8000 ? '\n... (tronqué)' : ''}
+${html}
 \`\`\`
 
 Génère maintenant le code Shopify en respectant le screenshot attaché.
 `;
+}
+
+function extractImportantStyles(computedStyle) {
+  if (!computedStyle) return '/* Pas de styles capturés */';
+
+  const important = [
+    'display', 'position', 'width', 'height', 'max-width', 'max-height',
+    'padding', 'margin', 'background', 'background-color', 'color',
+    'font-family', 'font-size', 'font-weight', 'line-height',
+    'text-align', 'border', 'border-radius', 'box-shadow',
+    'flex-direction', 'justify-content', 'align-items', 'gap',
+    'grid-template-columns', 'grid-gap'
+  ];
+
+  let css = '';
+  for (let prop of important) {
+    if (computedStyle[prop] && computedStyle[prop] !== 'none' && computedStyle[prop] !== 'normal') {
+      css += `  ${prop}: ${computedStyle[prop]};\n`;
+    }
+  }
+
+  return css || '/* Styles par défaut */';
 }
 
 function parsePerplexityResponse(response) {
@@ -93,7 +123,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     hasScreenshot: !!capture.screenshot,
     blockType: capture.blockType?.type,
     complexity: capture.complexity?.score,
-    htmlLength: capture.html?.length
+    htmlLength: capture.html?.length,
+    htmlComplete: !capture.html?.includes('... (tronqué)')
   });
 
   const prompt = buildPromptFromCapture(capture);
@@ -102,12 +133,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   promptTextarea.value = prompt;
 
-  // Afficher le vrai screenshot capturé
+  // Afficher le screenshot capturé (PROPRE maintenant)
   if (capture.screenshot && capture.screenshot.dataUrl) {
     const screenshotDiv = document.createElement('div');
     screenshotDiv.className = 'screenshot-item';
     screenshotDiv.innerHTML = `
-      <div class="screenshot-label">Screenshot capturé</div>
+      <div class="screenshot-label">📸 Screenshot capturé (propre, sans UI)</div>
       <img src="${capture.screenshot.dataUrl}" alt="Section capturée" style="width: 100%; border-radius: 8px; border: 1px solid #ddd;" />
       <div style="margin-top: 8px; font-size: 12px; color: #666;">
         Dimensions: ${capture.screenshot.naturalWidth} × ${capture.screenshot.naturalHeight}px<br/>
@@ -116,21 +147,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     `;
     screenshotsContainer.appendChild(screenshotDiv);
   } else {
-    screenshotsContainer.innerHTML = '<div class="info-box">Aucun screenshot disponible pour cette capture.</div>';
+    screenshotsContainer.innerHTML = '<div class="info-box">⚠️ Aucun screenshot disponible pour cette capture.</div>';
   }
 
-  // Informations supplémentaires
-  const infoDiv = document.createElement('div');
-  infoDiv.className = 'info-box';
-  infoDiv.style.marginTop = '16px';
-  infoDiv.innerHTML = `
-    <strong>Informations de capture :</strong><br/>
+  // Informations sur le HTML
+  const htmlInfo = document.createElement('div');
+  htmlInfo.className = 'info-box';
+  htmlInfo.style.marginTop = '16px';
+  htmlInfo.innerHTML = `
+    <strong>✅ Capture complète :</strong><br/>
     • Type détecté: ${capture.blockType?.type || 'generic'} (${Math.round((capture.blockType?.confidence || 0) * 100)}% confiance)<br/>
     • Complexité: ${capture.complexity?.score || 'N/A'}/10<br/>
     • Tag: &lt;${capture.tagName}&gt;<br/>
+    • HTML: ${capture.html?.length || 0} caractères (${capture.html?.includes('... (tronqué)') ? '⚠️ tronqué' : '✅ complet'})<br/>
     • Source: ${capture.url}
   `;
-  screenshotsContainer.appendChild(infoDiv);
+  screenshotsContainer.appendChild(htmlInfo);
 
   // Copier le prompt
   document.getElementById('copyPrompt').addEventListener('click', async () => {
@@ -142,16 +174,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     setTimeout(() => { btn.textContent = '📋 Copier le Prompt'; }, 2000);
   });
 
-  // Ouvrir Perplexity avec instruction pour attacher l'image
+  // Ouvrir Perplexity avec instruction
   document.getElementById('openPerplexity').addEventListener('click', async () => {
-    // Ouvrir Perplexity
     window.open('https://www.perplexity.ai', '_blank');
     
-    // Marquer l'étape comme faite
     document.querySelectorAll('.status')[1].textContent = 'Fait';
     document.querySelectorAll('.status')[1].className = 'status done';
 
-    // Si screenshot disponible, proposer de le télécharger
     if (capture.screenshot && capture.screenshot.dataUrl) {
       const downloadBtn = document.createElement('button');
       downloadBtn.className = 'btn btn-primary';
@@ -201,7 +230,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         throw new Error('Aucun bloc liquid ou json trouvé dans la réponse.');
       }
 
-      // Marquer l'étape comme terminée
       document.querySelectorAll('.status')[2].textContent = 'Fait';
       document.querySelectorAll('.status')[2].className = 'status done';
 
@@ -216,13 +244,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         </div>
       `;
 
-      // Sauvegarder la conversion
       chrome.storage.local.set({ 
         lastConversion: parsed,
         lastConversionTimestamp: Date.now()
       });
 
-      // Ajouter un bouton pour ouvrir la bibliothèque
       const openLibBtn = document.createElement('button');
       openLibBtn.className = 'btn btn-primary';
       openLibBtn.style.marginTop = '12px';
@@ -237,7 +263,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Annuler
   document.getElementById('cancel').addEventListener('click', () => {
     window.close();
   });
