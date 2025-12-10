@@ -1,5 +1,5 @@
 /**
- * Background Service Worker - Phase 3+ avec screenshots
+ * Background Service Worker - Fix connection errors
  * Support des 3 modes + gestion screenshots
  */
 
@@ -8,19 +8,27 @@ import { saveSection } from '../lib/library.js';
 import { detectBlockType, analyzeComplexity } from '../lib/analyzer.js';
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('[Shopify Converter] Extension installée - Version 1.1.0 (Screenshots)');
+  console.log('[Shopify Converter] Extension installée - Version 1.1.5');
 });
 
 // Messages
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'startSelectionFromPopup') {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (!tabs[0]) return;
+      if (!tabs[0]) {
+        sendResponse({ success: false, error: 'Aucun onglet actif' });
+        return;
+      }
       chrome.tabs.sendMessage(tabs[0].id, { 
         action: 'startSelection',
         mode: message.mode 
       }, (res) => {
-        sendResponse(res || { success: true });
+        if (chrome.runtime.lastError) {
+          console.error('[Background] Erreur sendMessage:', chrome.runtime.lastError);
+          sendResponse({ success: false, error: chrome.runtime.lastError.message });
+        } else {
+          sendResponse(res || { success: true });
+        }
       });
     });
     return true;
@@ -29,14 +37,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'elementCaptured') {
     handleElementCaptured(message.data, message.mode || 'manual')
       .then(() => sendResponse({ success: true }))
-      .catch((error) => sendResponse({ success: false, error: error.message }));
+      .catch((error) => {
+        console.error('[Background] Erreur handleElementCaptured:', error);
+        sendResponse({ success: false, error: error.message });
+      });
     return true;
   }
 
   if (message.action === 'captureTabScreenshot') {
     // Capturer l'onglet actif
     chrome.tabs.captureVisibleTab(null, { format: 'png' }, (dataUrl) => {
-      sendResponse({ dataUrl: dataUrl });
+      if (chrome.runtime.lastError) {
+        console.error('[Background] Erreur captureVisibleTab:', chrome.runtime.lastError);
+        sendResponse({ success: false, error: chrome.runtime.lastError.message });
+      } else {
+        sendResponse({ dataUrl: dataUrl });
+      }
     });
     return true;
   }
@@ -58,32 +74,44 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function handleElementCaptured(captureData, mode) {
   console.log('[Shopify Converter] elementCaptured - mode:', mode, 'screenshot:', captureData.screenshot ? 'OUI' : 'NON');
 
-  // Analyser la section
-  const blockType = detectBlockType({ 
-    tagName: captureData.tagName,
-    className: captureData.className,
-    outerHTML: captureData.html 
-  });
-  
-  const complexity = analyzeComplexity({
-    outerHTML: captureData.html,
-    querySelectorAll: () => [] // Simplifié pour background
-  });
+  try {
+    // Analyser la section
+    const blockType = detectBlockType({ 
+      tagName: captureData.tagName,
+      className: captureData.className,
+      outerHTML: captureData.html 
+    });
+    
+    const complexity = analyzeComplexity({
+      outerHTML: captureData.html,
+      querySelectorAll: () => [] // Simplifié pour background
+    });
 
-  // Enrichir les données
-  captureData.blockType = blockType;
-  captureData.complexity = complexity;
+    // Enrichir les données
+    captureData.blockType = blockType;
+    captureData.complexity = complexity;
 
-  // Stocker
-  await chrome.storage.local.set({ lastCapture: captureData });
+    // Stocker
+    await chrome.storage.local.set({ lastCapture: captureData });
 
-  // Router selon le mode
-  if (mode === 'api') {
-    await convertWithPerplexityAPI(captureData);
-  } else if (mode === 'auto') {
-    await convertWithPerplexityAuto(captureData);
-  } else {
-    // Mode manuel
+    // Router selon le mode
+    if (mode === 'api') {
+      await convertWithPerplexityAPI(captureData);
+    } else if (mode === 'auto') {
+      await convertWithPerplexityAuto(captureData);
+    } else {
+      // Mode manuel
+      await chrome.windows.create({
+        url: chrome.runtime.getURL('src/popup/perplexity-bridge.html'),
+        type: 'popup',
+        width: 900,
+        height: 700,
+        focused: true
+      });
+    }
+  } catch (error) {
+    console.error('[Background] Erreur dans handleElementCaptured:', error);
+    // Fallback vers mode manuel en cas d'erreur
     await chrome.windows.create({
       url: chrome.runtime.getURL('src/popup/perplexity-bridge.html'),
       type: 'popup',
@@ -166,16 +194,23 @@ async function convertWithPerplexityAuto(captureData) {
       }
     });
 
+    console.log('[Perplexity Auto] Onglet Perplexity prêt, injection du script...');
+
+    // Attendre que la page soit chargée
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Injecter le script
     await chrome.scripting.executeScript({
       target: { tabId: perplexityTab.id },
       func: submitToPerplexity,
       args: [prompt, captureData.screenshot?.dataUrl]
     });
 
-    console.log('[Perplexity Auto] Script injecté avec screenshot');
+    console.log('[Perplexity Auto] Script injecté avec succès');
 
   } catch (error) {
     console.error('[Perplexity Auto] Erreur:', error);
+    // Fallback vers mode manuel
     await chrome.windows.create({
       url: chrome.runtime.getURL('src/popup/perplexity-bridge.html'),
       type: 'popup',
@@ -190,15 +225,19 @@ async function findOrCreatePerplexityTab() {
   const tabs = await chrome.tabs.query({ url: 'https://www.perplexity.ai/*' });
 
   if (tabs.length > 0) {
+    console.log('[Perplexity] Onglet existant trouvé, activation...');
     await chrome.tabs.update(tabs[0].id, { active: true });
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await chrome.tabs.reload(tabs[0].id); // Recharger pour s'assurer que le content script est injecté
+    await new Promise(resolve => setTimeout(resolve, 3000));
     return tabs[0];
   } else {
+    console.log('[Perplexity] Création d\'un nouvel onglet...');
     const tab = await chrome.tabs.create({
       url: 'https://www.perplexity.ai',
       active: true
     });
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Attendre que la page se charge complètement
+    await new Promise(resolve => setTimeout(resolve, 5000));
     return tab;
   }
 }
@@ -284,10 +323,6 @@ function submitToPerplexity(prompt, screenshotDataUrl) {
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
       await new Promise(r => setTimeout(r, 500));
-
-      // TODO: Attacher le screenshot si possible
-      // Note: Perplexity ne supporte pas toujours l'upload programmatique
-      // L'utilisateur devra peut-être le faire manuellement
 
       const submitButton = document.querySelector('button[type="submit"]') ||
                           document.querySelector('button[aria-label*="Send"]') ||
