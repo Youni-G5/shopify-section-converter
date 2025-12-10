@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Paramètres - Shopify Converter</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      width: 450px;
+      padding: 0;
+      background: #f5f5f5;
+    }
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+    .header h1 {
+      font-size: 18px;
+      margin-bottom: 5px;
+    }
+    .content {
+      padding: 20px;
+    }
+    .section {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 15px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #4b5563;
+      margin-bottom: 8px;
+    }
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 2px solid #e5e7eb;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: 'Monaco', 'Consolas', monospace;
+    }
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    .hint {
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 5px;
+    }
+    .btn {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: #4CAF50;
+      color: white;
+      width: 100%;
+    }
+    .btn-primary:hover {
+      background: #45a049;
+    }
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+      width: 100%;
+    }
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+    .btn-secondary {
+      background: #6b7280;
+      color: white;
+      width: 100%;
+    }
+    .btn-secondary:hover {
+      background: #4b5563;
+    }
+    .status {
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .status.success {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    .status.error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    .status.warning {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    .divider {
+      height: 1px;
+      background: #e5e7eb;
+      margin: 15px 0;
+    }
+    .link-btn {
+      color: #667eea;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .link-btn:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>⚙️ Paramètres</h1>
+    <p style="font-size: 12px; opacity: 0.9;">Configuration de l'extension</p>
+  </div>
+
+  <div class="content">
+    <!-- API Perplexity -->
+    <div class="section">
+      <div class="section-title">
+        🔑 API Perplexity (Optionnel)
+      </div>
+      
+      <div id="apiStatus"></div>
+      
+      <div class="form-group">
+        <label for="apiKey">API Key</label>
+        <input type="password" id="apiKey" placeholder="pplx-xxxxxxxxxxxxxxxx" />
+        <div class="hint">
+          Pour le mode API uniquement. Le mode Auto utilise l'interface web.
+          <a href="https://www.perplexity.ai/settings/api" target="_blank" class="link-btn">
+            🔗 Obtenir une API key
+          </a>
+        </div>
+      </div>
+      
+      <button class="btn btn-primary" id="saveApiKey">💾 Sauvegarder</button>
+      
+      <div class="divider"></div>
+      
+      <button class="btn btn-secondary" id="testApiKey">🧪 Tester la connexion</button>
+      <div style="height: 8px;"></div>
+      <button class="btn btn-danger" id="deleteApiKey">🗑️ Supprimer l'API key</button>
+    </div>
+
+    <!-- Mode de conversion par défaut -->
+    <div class="section">
+      <div class="section-title">
+        🤖 Mode de conversion par défaut
+      </div>
+      
+      <div class="form-group">
+        <label>
+          <input type="radio" name="mode" value="auto" checked /> 
+          Auto - Injection directe dans Perplexity
+        </label>
+      </div>
+      
+      <div class="form-group">
+        <label>
+          <input type="radio" name="mode" value="manual" /> 
+          Manuel - Interface guidée
+        </label>
+      </div>
+      
+      <div class="form-group">
+        <label>
+          <input type="radio" name="mode" value="api" /> 
+          API - Appels directs (nécessite API key)
+        </label>
+      </div>
+    </div>
+
+    <!-- Bibliothèque -->
+    <div class="section">
+      <div class="section-title">
+        📚 Bibliothèque
+      </div>
+      
+      <button class="btn btn-primary" id="openLibrary">📚 Ouvrir la bibliothèque</button>
+      
+      <div class="divider"></div>
+      
+      <div class="hint" style="text-align: center;">
+        <div id="libraryStat">Chargement...</div>
+      </div>
+    </div>
+
+    <!-- Version -->
+    <div class="section" style="text-align: center; font-size: 12px; color: #6b7280;">
+      <strong>Shopify Section Converter</strong><br/>
+      Version 1.0.0 - Phase 3<br/>
+      Made with ❤️ by <a href="https://github.com/Youni-G5" target="_blank" class="link-btn">Youni-G5</a>
+    </div>
+  </div>
+
+  <script type="module" src="settings.js"></script>
+</body>
+</html>
