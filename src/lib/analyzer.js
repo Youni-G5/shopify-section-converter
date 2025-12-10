@@ -1,6 +1,7 @@
 /**
  * Librairie d'analyse sémantique de blocs
  * Phase 2 - Détection intelligente du type de section
+ * FIX: Gestion sécurisée de className
  */
 
 /**
@@ -70,10 +71,22 @@ export function detectBlockType(element) {
     }
   };
 
-  const tagName = element.tagName.toLowerCase();
-  const className = element.className.toString().toLowerCase();
-  const id = element.id.toLowerCase();
-  const textContent = element.textContent.substring(0, 200).toLowerCase();
+  // FIX: Gérer les cas où element n'a pas ces propriétés
+  const tagName = (element.tagName || '').toLowerCase();
+  
+  // Fix className qui peut être undefined ou un objet SVG
+  let className = '';
+  if (element.className) {
+    if (typeof element.className === 'string') {
+      className = element.className.toLowerCase();
+    } else if (element.className.baseVal !== undefined) {
+      className = element.className.baseVal.toLowerCase();
+    }
+  }
+  
+  const id = (element.id || '').toLowerCase();
+  const textContent = (element.textContent || '').substring(0, 200).toLowerCase();
+  const outerHTML = (element.outerHTML || '').substring(0, 500).toLowerCase();
 
   // Calculer les scores
   Object.keys(patterns).forEach(type => {
@@ -88,21 +101,24 @@ export function detectBlockType(element) {
     pattern.keywords.forEach(keyword => {
       if (className.includes(keyword)) pattern.score += 5;
       if (id.includes(keyword)) pattern.score += 5;
+      if (outerHTML.includes(keyword)) pattern.score += 3;
       if (textContent.includes(keyword)) pattern.score += 1;
     });
     
-    // Bonus pour la structure HTML spécifique
-    if (type === 'carousel' && element.querySelector('.slide, .swiper-slide, .carousel-item')) {
-      pattern.score += 10;
-    }
-    if (type === 'gallery' && element.querySelectorAll('img').length > 3) {
-      pattern.score += 8;
-    }
-    if (type === 'form' && element.querySelector('form')) {
-      pattern.score += 10;
-    }
-    if (type === 'faq' && element.querySelectorAll('.accordion, details, .collapse').length > 0) {
-      pattern.score += 10;
+    // Bonus pour la structure HTML spécifique (seulement si element a querySelector)
+    if (element.querySelector) {
+      if (type === 'carousel' && element.querySelector('.slide, .swiper-slide, .carousel-item')) {
+        pattern.score += 10;
+      }
+      if (type === 'gallery' && element.querySelectorAll && element.querySelectorAll('img').length > 3) {
+        pattern.score += 8;
+      }
+      if (type === 'form' && element.querySelector('form')) {
+        pattern.score += 10;
+      }
+      if (type === 'faq' && element.querySelectorAll && element.querySelectorAll('.accordion, details, .collapse').length > 0) {
+        pattern.score += 10;
+      }
     }
   });
 
@@ -133,6 +149,20 @@ export function detectBlockType(element) {
  * Analyser la complexité d'un élément
  */
 export function analyzeComplexity(element) {
+  // Protection si element est juste un objet avec outerHTML (background context)
+  if (!element.querySelectorAll) {
+    return {
+      score: 5,
+      depth: 5,
+      elementCount: 0,
+      uniqueTags: 0,
+      hasJavaScript: false,
+      hasVideo: false,
+      imageCount: 0,
+      difficulty: 'medium'
+    };
+  }
+  
   const depth = calculateDOMDepth(element);
   const elementCount = element.querySelectorAll('*').length;
   const uniqueTags = new Set([...element.querySelectorAll('*')].map(el => el.tagName)).size;
@@ -174,6 +204,7 @@ export function analyzeComplexity(element) {
 }
 
 function calculateDOMDepth(element, currentDepth = 0) {
+  if (!element.children) return currentDepth;
   const children = element.children;
   if (children.length === 0) return currentDepth;
   
@@ -190,22 +221,36 @@ function calculateDOMDepth(element, currentDepth = 0) {
  * Analyser le responsive design
  */
 export function analyzeResponsive(element) {
+  // Protection si element n'est pas un vrai DOM element
+  if (!element.style || typeof window === 'undefined') {
+    return {
+      usesFlexbox: false,
+      usesCSSGrid: false,
+      breakpoints: [],
+      isResponsive: false
+    };
+  }
+  
   const styles = window.getComputedStyle(element);
   const breakpoints = [];
   
   // Détecter les media queries appliquées
-  const sheets = document.styleSheets;
-  for (let sheet of sheets) {
-    try {
-      const rules = sheet.cssRules || sheet.rules;
-      for (let rule of rules) {
-        if (rule.type === CSSRule.MEDIA_RULE) {
-          breakpoints.push(rule.conditionText);
+  try {
+    const sheets = document.styleSheets;
+    for (let sheet of sheets) {
+      try {
+        const rules = sheet.cssRules || sheet.rules;
+        for (let rule of rules) {
+          if (rule.type === CSSRule.MEDIA_RULE) {
+            breakpoints.push(rule.conditionText);
+          }
         }
+      } catch (e) {
+        // CORS peut bloquer l'accès à certaines stylesheets
       }
-    } catch (e) {
-      // CORS peut bloquer l'accès à certaines stylesheets
     }
+  } catch (e) {
+    // Document peut ne pas être disponible
   }
   
   return {
@@ -217,12 +262,14 @@ export function analyzeResponsive(element) {
 }
 
 function hasFlexChildren(element) {
+  if (!element.children || typeof window === 'undefined') return false;
   return Array.from(element.children).some(child => 
     window.getComputedStyle(child).display === 'flex'
   );
 }
 
 function hasGridChildren(element) {
+  if (!element.children || typeof window === 'undefined') return false;
   return Array.from(element.children).some(child => 
     window.getComputedStyle(child).display === 'grid'
   );
