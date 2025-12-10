@@ -1,8 +1,6 @@
 /**
- * Content Script - Correction capture propre + HTML complet
+ * Content Script - Sans import, standalone
  */
-
-import { detectBlockType } from '../lib/analyzer.js';
 
 let isSelecting = false;
 let currentMode = 'manual';
@@ -82,6 +80,8 @@ async function handleClick(e) {
   const element = document.elementFromPoint(e.clientX, e.clientY);
   if (!element || element === overlay || element === highlightBox) return;
 
+  console.log('[Content] Élément cliqué:', element.tagName, element.className);
+
   // IMPORTANT: Masquer l'UI AVANT la capture
   if (overlay) overlay.style.display = 'none';
   if (highlightBox) highlightBox.style.display = 'none';
@@ -93,6 +93,7 @@ async function handleClick(e) {
     await captureElement(element);
   } catch (error) {
     console.error('[Content] Erreur capture:', error);
+    alert('❌ Erreur lors de la capture: ' + error.message);
   }
 
   cleanup();
@@ -100,6 +101,7 @@ async function handleClick(e) {
 
 function handleKeyDown(e) {
   if (e.key === 'Escape') {
+    console.log('[Content] Sélection annulée (ESC)');
     cleanup();
   }
 }
@@ -107,12 +109,15 @@ function handleKeyDown(e) {
 async function captureElement(element) {
   const rect = element.getBoundingClientRect();
 
+  console.log('[Content] Début capture - Element:', element.tagName, 'Rect:', rect);
+
   // Capturer le screenshot SANS l'overlay
   let screenshotData = null;
   try {
     const response = await chrome.runtime.sendMessage({ action: 'captureTabScreenshot' });
     if (response && response.dataUrl) {
       screenshotData = await cropScreenshot(response.dataUrl, rect);
+      console.log('[Content] Screenshot capturé:', screenshotData.size);
     }
   } catch (error) {
     console.warn('[Content] Screenshot failed:', error);
@@ -130,7 +135,7 @@ async function captureElement(element) {
   }
 
   const captureData = {
-    html: html, // HTML COMPLET, pas de troncature
+    html: html, // HTML COMPLET
     url: window.location.href,
     tagName: element.tagName,
     className: element.className,
@@ -148,13 +153,19 @@ async function captureElement(element) {
     timestamp: Date.now()
   };
 
-  console.log('[Content] Envoi au background - HTML:', html.length, 'chars, Screenshot:', !!screenshotData);
+  console.log('[Content] Envoi au background - Mode:', currentMode);
 
-  chrome.runtime.sendMessage({
-    action: 'elementCaptured',
-    data: captureData,
-    mode: currentMode
-  });
+  try {
+    await chrome.runtime.sendMessage({
+      action: 'elementCaptured',
+      data: captureData,
+      mode: currentMode
+    });
+    console.log('[Content] Données envoyées avec succès');
+  } catch (error) {
+    console.error('[Content] Erreur sendMessage:', error);
+    throw error;
+  }
 }
 
 async function cropScreenshot(dataUrl, rect) {
@@ -189,6 +200,10 @@ async function cropScreenshot(dataUrl, rect) {
         size: `${sizeKB} KB`
       });
     };
+    img.onerror = () => {
+      console.error('[Content] Erreur chargement image');
+      resolve(null);
+    };
     img.src = dataUrl;
   });
 }
@@ -207,4 +222,8 @@ function cleanup() {
     highlightBox.remove();
     highlightBox = null;
   }
+
+  console.log('[Content] Cleanup terminé');
 }
+
+console.log('[Content Script] Shopify Converter chargé v1.2.2');

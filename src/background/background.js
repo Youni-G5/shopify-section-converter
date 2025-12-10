@@ -1,5 +1,5 @@
 /**
- * Background Service Worker - Fix manuel mode
+ * Background Service Worker v1.2.2 - Fix erreurs
  */
 
 import { PerplexityAPI, getAPIKey } from '../lib/perplexity-api.js';
@@ -7,25 +7,31 @@ import { saveSection } from '../lib/library.js';
 import { detectBlockType, analyzeComplexity } from '../lib/analyzer.js';
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('[Shopify Converter] Extension installée - Version 1.1.6');
+  console.log('[Shopify Converter] Extension installée - Version 1.2.2');
 });
 
 // Messages
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'startSelectionFromPopup') {
+    console.log('[Background] Démarrage sélection - mode:', message.mode);
+    
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (!tabs[0]) {
         sendResponse({ success: false, error: 'Aucun onglet actif' });
         return;
       }
+      
+      console.log('[Background] Envoi au content script - tabId:', tabs[0].id);
+      
       chrome.tabs.sendMessage(tabs[0].id, { 
         action: 'startSelection',
         mode: message.mode 
       }, (res) => {
         if (chrome.runtime.lastError) {
-          console.error('[Background] Erreur sendMessage:', chrome.runtime.lastError);
+          console.error('[Background] Erreur:', chrome.runtime.lastError.message);
           sendResponse({ success: false, error: chrome.runtime.lastError.message });
         } else {
+          console.log('[Background] Content script répond:', res);
           sendResponse(res || { success: true });
         }
       });
@@ -34,8 +40,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'elementCaptured') {
+    console.log('[Background] Élément capturé reçu');
     handleElementCaptured(message.data, message.mode || 'manual')
-      .then(() => sendResponse({ success: true }))
+      .then(() => {
+        console.log('[Background] Traitement terminé');
+        sendResponse({ success: true });
+      })
       .catch((error) => {
         console.error('[Background] Erreur handleElementCaptured:', error);
         sendResponse({ success: false, error: error.message });
@@ -46,9 +56,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'captureTabScreenshot') {
     chrome.tabs.captureVisibleTab(null, { format: 'png' }, (dataUrl) => {
       if (chrome.runtime.lastError) {
-        console.error('[Background] Erreur captureVisibleTab:', chrome.runtime.lastError);
+        console.error('[Background] Erreur captureVisibleTab:', chrome.runtime.lastError.message);
         sendResponse({ success: false, error: chrome.runtime.lastError.message });
       } else {
+        console.log('[Background] Screenshot capturé');
         sendResponse({ dataUrl: dataUrl });
       }
     });
@@ -70,7 +81,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function handleElementCaptured(captureData, mode) {
-  console.log('[Shopify Converter] elementCaptured - mode:', mode, 'screenshot:', captureData.screenshot ? 'OUI' : 'NON');
+  console.log('[Background] handleElementCaptured - mode:', mode, 'screenshot:', !!captureData.screenshot);
 
   try {
     // Analyser la section
@@ -89,17 +100,17 @@ async function handleElementCaptured(captureData, mode) {
     captureData.blockType = blockType;
     captureData.complexity = complexity;
 
-    // IMPORTANT: Stocker avec la clé correcte pour le bridge
+    // Sauvegarder
     await chrome.storage.local.set({ 
       lastCapture: captureData,
-      // Aussi sauvegarder pour compatibilité
       capturedElement: captureData
     });
 
     console.log('[Background] Données sauvegardées:', {
       blockType: blockType.type,
       complexity: complexity.score,
-      hasScreenshot: !!captureData.screenshot
+      hasScreenshot: !!captureData.screenshot,
+      htmlLength: captureData.html.length
     });
 
     // Router selon le mode
@@ -108,7 +119,7 @@ async function handleElementCaptured(captureData, mode) {
     } else if (mode === 'auto') {
       await convertWithPerplexityAuto(captureData);
     } else {
-      // Mode manuel - ouvrir directement le bridge
+      // Mode manuel
       console.log('[Background] Ouverture du bridge manuel...');
       await chrome.windows.create({
         url: chrome.runtime.getURL('src/popup/perplexity-bridge.html'),
@@ -120,7 +131,7 @@ async function handleElementCaptured(captureData, mode) {
     }
   } catch (error) {
     console.error('[Background] Erreur dans handleElementCaptured:', error);
-    // Sauvegarder quand même les données de base
+    // Sauvegarder quand même
     await chrome.storage.local.set({ 
       lastCapture: captureData,
       capturedElement: captureData
@@ -198,7 +209,7 @@ async function convertWithPerplexityAuto(captureData) {
       }
     });
 
-    console.log('[Perplexity Auto] Onglet Perplexity prêt, injection du script...');
+    console.log('[Perplexity Auto] Injection du script...');
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     await chrome.scripting.executeScript({
@@ -207,7 +218,7 @@ async function convertWithPerplexityAuto(captureData) {
       args: [prompt, captureData.screenshot?.dataUrl]
     });
 
-    console.log('[Perplexity Auto] Script injecté avec succès');
+    console.log('[Perplexity Auto] Script injecté');
 
   } catch (error) {
     console.error('[Perplexity Auto] Erreur:', error);
@@ -225,13 +236,13 @@ async function findOrCreatePerplexityTab() {
   const tabs = await chrome.tabs.query({ url: 'https://www.perplexity.ai/*' });
 
   if (tabs.length > 0) {
-    console.log('[Perplexity] Onglet existant trouvé, activation...');
+    console.log('[Perplexity] Onglet existant');
     await chrome.tabs.update(tabs[0].id, { active: true });
     await chrome.tabs.reload(tabs[0].id);
     await new Promise(resolve => setTimeout(resolve, 3000));
     return tabs[0];
   } else {
-    console.log('[Perplexity] Création d\'un nouvel onglet...');
+    console.log('[Perplexity] Nouvel onglet');
     const tab = await chrome.tabs.create({
       url: 'https://www.perplexity.ai',
       active: true
@@ -247,74 +258,51 @@ function buildPromptWithScreenshot(capture) {
   return `
 CONVERSION SHOPIFY SECTION AVEC SCREENSHOT
 
-${screenshot ? '📸 UN SCREENSHOT DE LA SECTION EST ATTACHÉ. Utilise-le pour reproduire le design à l\'identique.' : ''}
+${screenshot ? '📸 SCREENSHOT ATTACHÉ' : ''}
 
 CONTEXTE:
-- Page source: ${url}
+- Page: ${url}
 - Élément: <${tagName} class="${className}">
-- Type détecté: ${blockType?.type || 'generic'} (confiance: ${Math.round((blockType?.confidence || 0) * 100)}%)
+- Type: ${blockType?.type || 'generic'}
 - Complexité: ${complexity?.score || 5}/10
-- Dimensions: ${screenshot ? `${screenshot.naturalWidth}x${screenshot.naturalHeight}px` : 'N/A'}
 
 OBJECTIFS:
-1. REPRODUIRE VISUELLEMENT la section à l'identique en te basant sur le screenshot
-2. Générer un fichier .liquid Shopify production-ready
-3. Créer un schema.json complet avec settings et blocks
-4. CSS responsif (breakpoints Shopify: 750px, 990px)
-5. JavaScript moderne si nécessaire
+1. Reproduire visuellement à l'identique
+2. Générer .liquid Shopify
+3. Créer schema.json complet
+4. CSS responsif
+5. JavaScript si nécessaire
 
-EXIGENCES SHOPIFY:
-- Utiliser {{ section.settings.* }} pour les options éditables
-- Implémenter {% for block in section.blocks %} pour éléments répétables
-- Ajouter {{ block.shopify_attributes }} sur chaque block
-- Filters d'images: {{ 'image.jpg' | image_url: width: 800 }}
-- Accessibilité WCAG AA (aria-labels, alt texts complets)
-- Support multilingue avec {{ 'key' | t }}
-
-FIDÉLITÉ VISUELLE:
-- Reproduis exactement les couleurs, typographie, espacements du screenshot
-- Respecte la hiérarchie visuelle et les proportions
-- Gère le responsive design intelligemment
-
-FORMAT DE RÉPONSE STRICT:
-
+FORMAT:
 \`\`\`liquid
-[Code complet du fichier .liquid]
+[Code]
 \`\`\`
-
 \`\`\`json
-[Schema.json complet et valide]
+[Schema]
 \`\`\`
-
 \`\`\`css
-[CSS optimisé reproduisant le design du screenshot]
+[CSS]
 \`\`\`
-
 \`\`\`javascript
-[JavaScript moderne si nécessaire]
+[JS]
 \`\`\`
 
-HTML CAPTURÉ (référence structure):
+HTML:
 \`\`\`html
-${html.substring(0, 6000)}
+${html.substring(0, 8000)}
 \`\`\`
-
-Génère maintenant le code Shopify en respectant le screenshot.
 `;
 }
 
 function submitToPerplexity(prompt, screenshotDataUrl) {
-  console.log('[Perplexity Injection] Script exécuté');
+  console.log('[Perplexity Injection] Exécution');
 
   setTimeout(async () => {
     try {
       const textarea = document.querySelector('textarea[placeholder*="Ask"]') ||
-                       document.querySelector('textarea[aria-label*="Ask"]') ||
                        document.querySelector('textarea');
 
-      if (!textarea) {
-        throw new Error('Textarea introuvable');
-      }
+      if (!textarea) throw new Error('Textarea introuvable');
 
       textarea.value = prompt;
       textarea.focus();
@@ -323,105 +311,23 @@ function submitToPerplexity(prompt, screenshotDataUrl) {
       await new Promise(r => setTimeout(r, 500));
 
       const submitButton = document.querySelector('button[type="submit"]') ||
-                          document.querySelector('button[aria-label*="Send"]') ||
                           Array.from(document.querySelectorAll('button')).find(
-                            btn => btn.textContent.trim().toLowerCase().includes('ask')
+                            btn => btn.textContent.toLowerCase().includes('ask')
                           );
 
-      if (!submitButton) {
-        throw new Error('Bouton submit introuvable');
-      }
+      if (!submitButton) throw new Error('Bouton submit introuvable');
 
       submitButton.click();
       console.log('[Perplexity Injection] Prompt soumis');
 
-      observePerplexityResponse();
-
     } catch (error) {
       console.error('[Perplexity Injection] Erreur:', error);
-      chrome.runtime.sendMessage({
-        action: 'perplexity_error',
-        error: error.message
-      });
     }
   }, 1000);
 }
 
-function observePerplexityResponse() {
-  let responseStarted = false;
-  let lastContent = '';
-  let stableCount = 0;
-
-  const observer = new MutationObserver(() => {
-    const responseElement = document.querySelector('[data-testid="answer-container"]') ||
-                           document.querySelector('.prose') ||
-                           document.querySelector('[class*="answer"]');
-
-    if (!responseElement) return;
-
-    const currentContent = responseElement.textContent;
-
-    if (!responseStarted && currentContent.trim().length > 0) {
-      responseStarted = true;
-      console.log('[Perplexity Observer] Réponse démarrée');
-    }
-
-    if (currentContent === lastContent) {
-      stableCount++;
-    } else {
-      stableCount = 0;
-      lastContent = currentContent;
-    }
-
-    if (responseStarted && stableCount >= 3) {
-      observer.disconnect();
-      console.log('[Perplexity Observer] Réponse complète');
-
-      const extractedCode = extractCodeFromResponse(responseElement);
-
-      chrome.runtime.sendMessage({
-        action: 'perplexity_response',
-        data: extractedCode
-      });
-    }
-  });
-
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    characterData: true
-  });
-
-  setTimeout(() => {
-    observer.disconnect();
-    chrome.runtime.sendMessage({
-      action: 'perplexity_error',
-      error: 'Timeout: La réponse a pris trop de temps'
-    });
-  }, 120000);
-}
-
-function extractCodeFromResponse(element) {
-  const fullText = element.innerText;
-
-  function extractBlock(lang) {
-    const regex = new RegExp('```' + lang + '\\n([\\s\\S]*?)```', 'i');
-    const match = fullText.match(regex);
-    return match ? match[1].trim() : '';
-  }
-
-  return {
-    liquid: extractBlock('liquid'),
-    schema: extractBlock('json'),
-    css: extractBlock('css'),
-    js: extractBlock('javascript'),
-    fullResponse: fullText
-  };
-}
-
 async function handlePerplexityResponse(data) {
   console.log('[Perplexity] Réponse reçue');
-
   await chrome.storage.local.set({ lastConversion: data });
 
   const capture = await chrome.storage.local.get('lastCapture');
