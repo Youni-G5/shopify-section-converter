@@ -1,6 +1,6 @@
 /**
- * Content Script - Sans ES6 imports (fix)
- * Les content scripts ne supportent pas les imports ES6
+ * Content Script - Version corrigée sans CDN externe
+ * Utilise chrome.tabs.captureVisibleTab au lieu de html2canvas
  */
 
 let isSelectionMode = false;
@@ -136,7 +136,19 @@ function handleMouseMove(e) {
 
 function updateElementInfo(element) {
   const tag = element.tagName.toLowerCase();
-  const classes = element.className ? element.className.toString().split(' ').slice(0, 3).join(', ') : 'Aucune';
+  
+  // Fix: Vérifier que className existe et est une string
+  let classes = 'Aucune';
+  if (element.className) {
+    if (typeof element.className === 'string') {
+      const classList = element.className.split(' ').filter(c => c.trim().length > 0);
+      classes = classList.length > 0 ? classList.slice(0, 3).join(', ') : 'Aucune';
+    } else if (element.className.baseVal !== undefined) {
+      // SVG elements
+      classes = element.className.baseVal || 'Aucune';
+    }
+  }
+  
   const rect = element.getBoundingClientRect();
   const dimensions = `${Math.round(rect.width)}px × ${Math.round(rect.height)}px`;
   
@@ -166,23 +178,34 @@ function handleKeyDown(e) {
 
 async function captureElement(element) {
   try {
-    console.log('[Shopify Converter] Démarrage de la capture avec screenshots...');
+    console.log('[Shopify Converter] Démarrage de la capture...');
     
     stopSelectionMode();
     showLoader('Capture en cours...');
     
-    // Capturer le screenshot
     updateLoader('📸 Capture du screenshot...');
-    const screenshot = await captureElementScreenshot(element);
+    
+    // Capturer le screenshot via le background (chrome.tabs.captureVisibleTab)
+    const screenshot = await captureScreenshotViaBackground(element);
     
     updateLoader('📝 Extraction des données...');
+    
+    // Fix: Gérer className correctement
+    let className = '';
+    if (element.className) {
+      if (typeof element.className === 'string') {
+        className = element.className;
+      } else if (element.className.baseVal !== undefined) {
+        className = element.className.baseVal;
+      }
+    }
     
     const captureData = {
       html: element.outerHTML,
       computedStyles: getComputedStylesRecursive(element),
       boundingBox: element.getBoundingClientRect().toJSON(),
       tagName: element.tagName,
-      className: element.className,
+      className: className,
       screenshot: screenshot,
       url: window.location.href,
       timestamp: Date.now()
@@ -218,69 +241,74 @@ async function captureElement(element) {
 }
 
 /**
- * Capturer un screenshot de l'élément avec html2canvas
+ * Capturer un screenshot via le background script
+ * Utilise chrome.tabs.captureVisibleTab au lieu de html2canvas
  */
-async function captureElementScreenshot(element) {
+async function captureScreenshotViaBackground(element) {
   try {
-    // Charger html2canvas si nécessaire
-    if (typeof html2canvas === 'undefined') {
-      await loadHtml2Canvas();
-    }
-
     const rect = element.getBoundingClientRect();
     
-    // Scroll vers l'élément
-    const originalScroll = { x: window.scrollX, y: window.scrollY };
-    element.scrollIntoView({ behavior: 'instant', block: 'center' });
-    await sleep(300);
-
-    // Capturer avec html2canvas
-    const canvas = await html2canvas(element, {
-      backgroundColor: null,
-      scale: 2,
-      logging: false,
-      useCORS: true,
-      allowTaint: true,
-      imageTimeout: 0,
-      removeContainer: true
+    // Demander au background de capturer l'onglet
+    const response = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ action: 'captureTabScreenshot' }, (response) => {
+        if (response && response.dataUrl) {
+          resolve(response);
+        } else {
+          reject(new Error('Impossible de capturer l\'onglet'));
+        }
+      });
     });
-
-    // Restaurer le scroll
-    window.scrollTo(originalScroll.x, originalScroll.y);
-
-    const dataUrl = canvas.toDataURL('image/png', 0.9);
-
+    
+    // Cropper l'image sur l'élément
+    const croppedDataUrl = await cropImage(response.dataUrl, rect);
+    
     return {
-      dataUrl: dataUrl,
-      width: canvas.width,
-      height: canvas.height,
+      dataUrl: croppedDataUrl,
+      width: Math.round(rect.width * 2),
+      height: Math.round(rect.height * 2),
       naturalWidth: rect.width,
       naturalHeight: rect.height,
-      size: estimateBase64Size(dataUrl)
+      size: estimateBase64Size(croppedDataUrl)
     };
-
+    
   } catch (error) {
-    console.error('[Screenshot] Erreur html2canvas:', error);
+    console.error('[Screenshot] Erreur capture:', error);
+    // Retourner null si échec - le prompt fonctionnera quand même sans screenshot
     return null;
   }
 }
 
-function loadHtml2Canvas() {
+/**
+ * Cropper une image sur une zone spécifique
+ */
+async function cropImage(dataUrl, rect) {
   return new Promise((resolve, reject) => {
-    if (typeof html2canvas !== 'undefined') {
-      resolve();
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Impossible de charger html2canvas'));
-    document.head.appendChild(script);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      const scale = 2; // Retina
+      canvas.width = rect.width * scale;
+      canvas.height = rect.height * scale;
+      ctx.scale(scale, scale);
+      
+      // Crop
+      ctx.drawImage(
+        img,
+        rect.left, rect.top, rect.width, rect.height,
+        0, 0, rect.width, rect.height
+      );
+      
+      resolve(canvas.toDataURL('image/png', 0.9));
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
   });
 }
 
 function estimateBase64Size(base64) {
+  if (!base64) return 'N/A';
   const bytes = (base64.length * 3) / 4;
   if (bytes < 1024) return bytes.toFixed(0) + ' B';
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -351,8 +379,4 @@ function showErrorMessage(error) {
   setTimeout(() => message.remove(), 5000);
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-console.log('[Shopify Converter] Content script chargé v1.1.0');
+console.log('[Shopify Converter] Content script chargé v1.1.1');
