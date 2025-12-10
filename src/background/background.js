@@ -1,6 +1,5 @@
 /**
- * Background Service Worker - Fix connection errors
- * Support des 3 modes + gestion screenshots
+ * Background Service Worker - Fix manuel mode
  */
 
 import { PerplexityAPI, getAPIKey } from '../lib/perplexity-api.js';
@@ -8,7 +7,7 @@ import { saveSection } from '../lib/library.js';
 import { detectBlockType, analyzeComplexity } from '../lib/analyzer.js';
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('[Shopify Converter] Extension installée - Version 1.1.5');
+  console.log('[Shopify Converter] Extension installée - Version 1.1.6');
 });
 
 // Messages
@@ -45,7 +44,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'captureTabScreenshot') {
-    // Capturer l'onglet actif
     chrome.tabs.captureVisibleTab(null, { format: 'png' }, (dataUrl) => {
       if (chrome.runtime.lastError) {
         console.error('[Background] Erreur captureVisibleTab:', chrome.runtime.lastError);
@@ -84,15 +82,25 @@ async function handleElementCaptured(captureData, mode) {
     
     const complexity = analyzeComplexity({
       outerHTML: captureData.html,
-      querySelectorAll: () => [] // Simplifié pour background
+      querySelectorAll: () => []
     });
 
     // Enrichir les données
     captureData.blockType = blockType;
     captureData.complexity = complexity;
 
-    // Stocker
-    await chrome.storage.local.set({ lastCapture: captureData });
+    // IMPORTANT: Stocker avec la clé correcte pour le bridge
+    await chrome.storage.local.set({ 
+      lastCapture: captureData,
+      // Aussi sauvegarder pour compatibilité
+      capturedElement: captureData
+    });
+
+    console.log('[Background] Données sauvegardées:', {
+      blockType: blockType.type,
+      complexity: complexity.score,
+      hasScreenshot: !!captureData.screenshot
+    });
 
     // Router selon le mode
     if (mode === 'api') {
@@ -100,7 +108,8 @@ async function handleElementCaptured(captureData, mode) {
     } else if (mode === 'auto') {
       await convertWithPerplexityAuto(captureData);
     } else {
-      // Mode manuel
+      // Mode manuel - ouvrir directement le bridge
+      console.log('[Background] Ouverture du bridge manuel...');
       await chrome.windows.create({
         url: chrome.runtime.getURL('src/popup/perplexity-bridge.html'),
         type: 'popup',
@@ -111,7 +120,12 @@ async function handleElementCaptured(captureData, mode) {
     }
   } catch (error) {
     console.error('[Background] Erreur dans handleElementCaptured:', error);
-    // Fallback vers mode manuel en cas d'erreur
+    // Sauvegarder quand même les données de base
+    await chrome.storage.local.set({ 
+      lastCapture: captureData,
+      capturedElement: captureData
+    });
+    // Fallback vers mode manuel
     await chrome.windows.create({
       url: chrome.runtime.getURL('src/popup/perplexity-bridge.html'),
       type: 'popup',
@@ -122,9 +136,6 @@ async function handleElementCaptured(captureData, mode) {
   }
 }
 
-/**
- * Mode API - Appels directs
- */
 async function convertWithPerplexityAPI(captureData) {
   try {
     console.log('[Perplexity API] Démarrage conversion...');
@@ -137,10 +148,8 @@ async function convertWithPerplexityAPI(captureData) {
     const api = new PerplexityAPI(apiKey);
     const result = await api.convert(captureData);
 
-    // Stocker la conversion
     await chrome.storage.local.set({ lastConversion: result });
 
-    // Sauvegarder dans la bibliothèque
     await saveSection({
       name: `Section ${captureData.blockType?.type || 'generic'}`,
       url: captureData.url,
@@ -154,7 +163,6 @@ async function convertWithPerplexityAPI(captureData) {
       conversionMethod: 'api'
     });
 
-    // Ouvrir le panel de review
     await chrome.windows.create({
       url: chrome.runtime.getURL('src/popup/review.html'),
       type: 'popup',
@@ -165,7 +173,6 @@ async function convertWithPerplexityAPI(captureData) {
 
   } catch (error) {
     console.error('[Perplexity API] Erreur:', error);
-    // Fallback vers mode manuel
     await chrome.windows.create({
       url: chrome.runtime.getURL('src/popup/perplexity-bridge.html'),
       type: 'popup',
@@ -176,9 +183,6 @@ async function convertWithPerplexityAPI(captureData) {
   }
 }
 
-/**
- * Mode Auto - Injection Perplexity
- */
 async function convertWithPerplexityAuto(captureData) {
   try {
     console.log('[Perplexity Auto] Démarrage conversion automatique...');
@@ -195,11 +199,8 @@ async function convertWithPerplexityAuto(captureData) {
     });
 
     console.log('[Perplexity Auto] Onglet Perplexity prêt, injection du script...');
-
-    // Attendre que la page soit chargée
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // Injecter le script
     await chrome.scripting.executeScript({
       target: { tabId: perplexityTab.id },
       func: submitToPerplexity,
@@ -210,7 +211,6 @@ async function convertWithPerplexityAuto(captureData) {
 
   } catch (error) {
     console.error('[Perplexity Auto] Erreur:', error);
-    // Fallback vers mode manuel
     await chrome.windows.create({
       url: chrome.runtime.getURL('src/popup/perplexity-bridge.html'),
       type: 'popup',
@@ -227,7 +227,7 @@ async function findOrCreatePerplexityTab() {
   if (tabs.length > 0) {
     console.log('[Perplexity] Onglet existant trouvé, activation...');
     await chrome.tabs.update(tabs[0].id, { active: true });
-    await chrome.tabs.reload(tabs[0].id); // Recharger pour s'assurer que le content script est injecté
+    await chrome.tabs.reload(tabs[0].id);
     await new Promise(resolve => setTimeout(resolve, 3000));
     return tabs[0];
   } else {
@@ -236,7 +236,6 @@ async function findOrCreatePerplexityTab() {
       url: 'https://www.perplexity.ai',
       active: true
     });
-    // Attendre que la page se charge complètement
     await new Promise(resolve => setTimeout(resolve, 5000));
     return tab;
   }
@@ -304,9 +303,8 @@ Génère maintenant le code Shopify en respectant le screenshot.
 `;
 }
 
-// Fonction injectée dans Perplexity
 function submitToPerplexity(prompt, screenshotDataUrl) {
-  console.log('[Perplexity Injection] Script exécuté avec screenshot');
+  console.log('[Perplexity Injection] Script exécuté');
 
   setTimeout(async () => {
     try {
@@ -426,7 +424,6 @@ async function handlePerplexityResponse(data) {
 
   await chrome.storage.local.set({ lastConversion: data });
 
-  // Sauvegarder dans la bibliothèque
   const capture = await chrome.storage.local.get('lastCapture');
   if (capture.lastCapture) {
     await saveSection({
