@@ -1,8 +1,7 @@
 /**
- * Content Script - Phase 3+ avec screenshots réels
+ * Content Script - Sans ES6 imports (fix)
+ * Les content scripts ne supportent pas les imports ES6
  */
-
-import { captureElementScreenshot, captureMultiViewportReal } from '../lib/screenshot.js';
 
 let isSelectionMode = false;
 let selectionOverlay = null;
@@ -172,7 +171,7 @@ async function captureElement(element) {
     stopSelectionMode();
     showLoader('Capture en cours...');
     
-    // Capturer le screenshot AVANT de masquer l'élément
+    // Capturer le screenshot
     updateLoader('📸 Capture du screenshot...');
     const screenshot = await captureElementScreenshot(element);
     
@@ -184,7 +183,7 @@ async function captureElement(element) {
       boundingBox: element.getBoundingClientRect().toJSON(),
       tagName: element.tagName,
       className: element.className,
-      screenshot: screenshot, // Screenshot réel
+      screenshot: screenshot,
       url: window.location.href,
       timestamp: Date.now()
     };
@@ -216,6 +215,76 @@ async function captureElement(element) {
     hideLoader();
     showErrorMessage(error.message);
   }
+}
+
+/**
+ * Capturer un screenshot de l'élément avec html2canvas
+ */
+async function captureElementScreenshot(element) {
+  try {
+    // Charger html2canvas si nécessaire
+    if (typeof html2canvas === 'undefined') {
+      await loadHtml2Canvas();
+    }
+
+    const rect = element.getBoundingClientRect();
+    
+    // Scroll vers l'élément
+    const originalScroll = { x: window.scrollX, y: window.scrollY };
+    element.scrollIntoView({ behavior: 'instant', block: 'center' });
+    await sleep(300);
+
+    // Capturer avec html2canvas
+    const canvas = await html2canvas(element, {
+      backgroundColor: null,
+      scale: 2,
+      logging: false,
+      useCORS: true,
+      allowTaint: true,
+      imageTimeout: 0,
+      removeContainer: true
+    });
+
+    // Restaurer le scroll
+    window.scrollTo(originalScroll.x, originalScroll.y);
+
+    const dataUrl = canvas.toDataURL('image/png', 0.9);
+
+    return {
+      dataUrl: dataUrl,
+      width: canvas.width,
+      height: canvas.height,
+      naturalWidth: rect.width,
+      naturalHeight: rect.height,
+      size: estimateBase64Size(dataUrl)
+    };
+
+  } catch (error) {
+    console.error('[Screenshot] Erreur html2canvas:', error);
+    return null;
+  }
+}
+
+function loadHtml2Canvas() {
+  return new Promise((resolve, reject) => {
+    if (typeof html2canvas !== 'undefined') {
+      resolve();
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Impossible de charger html2canvas'));
+    document.head.appendChild(script);
+  });
+}
+
+function estimateBase64Size(base64) {
+  const bytes = (base64.length * 3) / 4;
+  if (bytes < 1024) return bytes.toFixed(0) + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
 function getComputedStylesRecursive(element, depth = 0, maxDepth = 3) {
@@ -282,4 +351,8 @@ function showErrorMessage(error) {
   setTimeout(() => message.remove(), 5000);
 }
 
-console.log('[Shopify Converter] Content script Phase 3+ chargé avec screenshots');
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+console.log('[Shopify Converter] Content script chargé v1.1.0');
